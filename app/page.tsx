@@ -8,7 +8,7 @@ import ScreenStoryboard from "@/components/screen-storyboard";
 import ScreenExport from "@/components/screen-export";
 import NewProjectModal from "@/components/new-project-modal";
 import ProjectSettings from "@/components/settings";
-import { DEFAULT_PROJECTS, type Project } from "@/lib/data";
+import { type Project } from "@/lib/data";
 import { createClient } from "@/lib/supabase-client";
 import {
   createProject,
@@ -63,7 +63,8 @@ async function ensureProjectSeeded(
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>("home");
-  const [project, setProject] = useState<Project>(DEFAULT_PROJECTS[0]);
+  // null = no project opened yet; all project-scoped screens redirect to home.
+  const [project, setProject] = useState<Project | null>(null);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [focusShot, setFocusShot] = useState<number | null>(null);
@@ -72,12 +73,7 @@ export default function App() {
 
   const projects: Project[] = useMemo(() => rows.map(dbToProject), [rows]);
 
-  // Treat only UUIDs as real DB project ids — anything shaped like the seed
-  // ("p1", "p2", ...) is a local demo project and has no matching DB row.
-  const isDbProject = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
-    project.id
-  );
-  const activeProjectId = isDbProject ? project.id : null;
+  const activeProjectId = project?.id ?? null;
 
   // Seed demo data once per open of a real project.
   const [seededIds, setSeededIds] = useState<Set<string>>(() => new Set());
@@ -111,14 +107,26 @@ export default function App() {
     if (typeof window !== "undefined") localStorage.setItem("ff-screen", screen);
   }, [screen]);
 
+  // Force back to home if user navigates to a project-scoped screen without a project open.
+  useEffect(() => {
+    if (!project && screen !== "home") setScreen("home");
+  }, [project, screen]);
+
   const breadcrumbs = (() => {
+    if (!project || screen === "home") return [];
     const b = [project.name];
     if (screen === "concept") b.push("Concept");
     if (screen === "board") b.push("Board");
     if (screen === "storyboard") b.push("Storyboard");
     if (screen === "export") b.push("Export");
-    return screen === "home" ? [] : b;
+    return b;
   })();
+
+  function navTo(s: ScreenId) {
+    // LeftRail click: if no project, force home.
+    if (s !== "home" && !project) return setScreen("home");
+    setScreen(s);
+  }
 
   async function handleCreateProject(data: { name: string; client: string; aspect: Project["aspect"] }) {
     setCreating(true);
@@ -147,31 +155,36 @@ export default function App() {
     }
   }
 
+  const effectiveScreen: ScreenId = !project && screen !== "home" ? "home" : screen;
+
   return (
-    <WindowShell title={screen === "home" ? "FrameForge — Projects" : `FrameForge — ${project.name}`}>
+    <WindowShell title={effectiveScreen === "home" ? "FrameForge — Projects" : `FrameForge — ${project?.name ?? ""}`}>
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
-        <LeftRail screen={screen} onNav={setScreen} />
+        <LeftRail screen={effectiveScreen} onNav={navTo} />
         <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
           <AppHeader
-            projectName={project.name}
+            projectName={project?.name}
             breadcrumbs={breadcrumbs}
-            onBack={() => setScreen("home")}
-            onSettings={() => setSettingsOpen(true)}
+            onBack={() => {
+              setScreen("home");
+              setProject(null);
+            }}
+            onSettings={() => project && setSettingsOpen(true)}
           />
-          {screen === "home" && (
+          {effectiveScreen === "home" && (
             <ScreenHome
               projects={projects}
               onOpenProject={(p) => {
                 setProject(p);
-                setScreen("concept");
+                setScreen("board");
               }}
               onNewProject={() => setNewProjectOpen(true)}
             />
           )}
-          {screen === "concept" && (
+          {effectiveScreen === "concept" && project && (
             <ScreenConcept onNext={() => setScreen("board")} projectId={activeProjectId} />
           )}
-          {screen === "board" && (
+          {effectiveScreen === "board" && project && (
             <ScreenBoard
               projectId={activeProjectId}
               onShot={(n) => {
@@ -180,12 +193,12 @@ export default function App() {
               }}
             />
           )}
-          {screen === "storyboard" && (
+          {effectiveScreen === "storyboard" && project && (
             <ScreenStoryboard initialShot={focusShot} projectId={activeProjectId} />
           )}
-          {screen === "export" && <ScreenExport projectId={activeProjectId} />}
+          {effectiveScreen === "export" && project && <ScreenExport projectId={activeProjectId} />}
           <ProjectSettings
-            open={settingsOpen}
+            open={settingsOpen && !!project}
             onClose={() => setSettingsOpen(false)}
             project={project}
           />
