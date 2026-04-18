@@ -16,7 +16,6 @@ import {
   listMyProjects,
   type DBProject,
 } from "@/lib/queries";
-import { seedDemoBoard } from "@/lib/queries-board";
 import { seedDemoShots } from "@/lib/queries-shots";
 import { seedDemoConcepts } from "@/lib/queries-concepts";
 import { useSession } from "@/lib/use-session";
@@ -55,12 +54,13 @@ function useProjects() {
 
 // Per-project idempotent seeding. Runs once per (browser session, project id)
 // so re-opening the same project doesn't re-hit the DB.
+// Board is intentionally NOT seeded — new projects open with an empty canvas
+// the user populates themselves. Concepts and shots still seed so other
+// screens have something to show.
 async function ensureProjectSeeded(
   supabase: ReturnType<typeof createClient>,
   projectId: string
 ): Promise<void> {
-  // Order matters — shots reference board_items for their ref_item_id.
-  await seedDemoBoard(supabase, projectId);
   await seedDemoShots(supabase, projectId);
   await seedDemoConcepts(supabase, projectId);
 }

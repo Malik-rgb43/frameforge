@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { I } from "./icons";
 import { Btn, Chip, Field, Input, Segmented, StatusDot, Textarea, Toggle, iconBtnStyle } from "./ui";
 import {
@@ -11,10 +11,13 @@ import {
 } from "@/lib/data";
 import { createClient } from "@/lib/supabase-client";
 import {
+  createConnection,
   listBoardItems,
   listConnections,
+  updateBoardItem,
   type DBBoardItemUI,
 } from "@/lib/queries-board";
+import { beginDrag, findBoardItemIdFromEl } from "@/lib/drag-utils";
 
 type Mode = "image" | "video";
 
@@ -42,6 +45,19 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
   const [promptCard, setPromptCard] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("image");
   const [loading, setLoading] = useState(true);
+  // Drag preview state — which item is being dragged + its temp x/y
+  const [dragging, setDragging] = useState<{ id: string; x: number; y: number; shift: boolean } | null>(null);
+  // Live endpoint for the ghost connection line when Shift-dragging.
+  // Stored in canvas-local coords (relative to the canvas body container).
+  const [linkPreview, setLinkPreview] = useState<{
+    fromId: string;
+    x: number;
+    y: number;
+    overItemId: string | null;
+  } | null>(null);
+  // Whether the user is hovering an item (drives the "Shift-drag to link" chip)
+  const [hoveringItem, setHoveringItem] = useState(false);
+  const canvasRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -85,6 +101,127 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
   }, [supabase, projectId]);
 
   const openCardItem = items.find((i) => i.id === promptCard);
+
+  // Re-query the DB after a drag so positions match server truth and
+  // we don't drift over time (optimistic updates layered on top).
+  const refetchItems = useCallback(async () => {
+    if (!projectId) return;
+    try {
+      const [rows, conns] = await Promise.all([
+        listBoardItems(supabase, projectId),
+        listConnections(supabase, projectId),
+      ]);
+      setItems(rows);
+      setLinks(conns);
+    } catch (err) {
+      console.error("refetch board", err);
+    }
+  }, [supabase, projectId]);
+
+  const handleItemPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLDivElement>, item: DBBoardItemUI) => {
+      // Only left-button / primary pointer.
+      if (e.button !== 0) return;
+      // Ignore pointerdowns on buttons inside the card (prompt toggle, etc.)
+      const target = e.target as HTMLElement;
+      if (target.closest("button")) return;
+      e.preventDefault();
+      e.stopPropagation();
+
+      const shiftAtStart = e.shiftKey;
+      const canvas = canvasRef.current;
+      const canvasRect = canvas?.getBoundingClientRect();
+
+      beginDrag(
+        e,
+        {
+          pointerX: e.clientX,
+          pointerY: e.clientY,
+          originX: item.x,
+          originY: item.y,
+          shiftAtStart,
+        },
+        {
+          onMove: (info) => {
+            const shift = info.shift || shiftAtStart;
+            if (shift) {
+              // Connection-draw mode — don't move the card, just track
+              // the ghost line endpoint.
+              if (canvasRect) {
+                setLinkPreview({
+                  fromId: item.id,
+                  x: info.currentX - canvasRect.left,
+                  y: info.currentY - canvasRect.top,
+                  overItemId: findBoardItemIdFromEl(
+                    document.elementFromPoint(info.currentX, info.currentY) as HTMLElement | null
+                  ),
+                });
+              }
+            } else {
+              setDragging({
+                id: item.id,
+                x: info.originX + info.dx,
+                y: info.originY + info.dy,
+                shift: false,
+              });
+            }
+          },
+          onEnd: async (info) => {
+            setLinkPreview(null);
+            setDragging(null);
+
+            // Didn't cross threshold — treat as click.
+            if (info.cancelled) return;
+
+            const shift = info.shift || shiftAtStart;
+
+            if (shift) {
+              // Connection-draw drop: if released over a different item, create a connection.
+              const targetId = findBoardItemIdFromEl(info.targetEl);
+              if (!targetId || targetId === item.id) return;
+              if (!projectId) return;
+              const kind: RefLink["kind"] = item.generated ? "variant" : "reference";
+              // Optimistic
+              setLinks((prev) => [...prev, { from: item.id, to: targetId, kind }]);
+              try {
+                await createConnection(supabase, projectId, item.id, targetId, kind);
+              } catch (err) {
+                console.error("createConnection", err);
+                // Rollback on failure.
+                setLinks((prev) =>
+                  prev.filter((l) => !(l.from === item.id && l.to === targetId && l.kind === kind))
+                );
+              }
+              return;
+            }
+
+            // Position drop: commit new x/y.
+            const newX = Math.round(info.originX + info.dx);
+            const newY = Math.round(info.originY + info.dy);
+            // Optimistic local update so the card doesn't snap back.
+            setItems((prev) => prev.map((i) => (i.id === item.id ? { ...i, x: newX, y: newY } : i)));
+            if (!projectId) return;
+            try {
+              await updateBoardItem(supabase, item.id, { canvas_x: newX, canvas_y: newY });
+              await refetchItems();
+            } catch (err) {
+              console.error("updateBoardItem", err);
+            }
+          },
+        }
+      );
+    },
+    [supabase, projectId, refetchItems]
+  );
+
+  // Position in canvas-local coords of the link-preview source item center.
+  const linkPreviewSource = linkPreview
+    ? (() => {
+        const src = items.find((i) => i.id === linkPreview.fromId);
+        if (!src) return null;
+        return { x: src.x + src.w / 2, y: src.y + src.h / 2 };
+      })()
+    : null;
 
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -256,6 +393,7 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
 
         {/* Canvas body */}
         <div
+          ref={canvasRef}
           style={{
             position: "absolute",
             inset: 0,
@@ -294,6 +432,27 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
                 </g>
               );
             })}
+            {/* Live ghost connection while Shift-dragging */}
+            {linkPreview && linkPreviewSource && (
+              <g>
+                <path
+                  d={`M${linkPreviewSource.x},${linkPreviewSource.y} L${linkPreview.x},${linkPreview.y}`}
+                  stroke="#d4ff3a"
+                  strokeWidth="2"
+                  fill="none"
+                  strokeDasharray="6 4"
+                  opacity="0.85"
+                  markerEnd="url(#arr)"
+                />
+                <circle
+                  cx={linkPreview.x}
+                  cy={linkPreview.y}
+                  r={linkPreview.overItemId && linkPreview.overItemId !== linkPreview.fromId ? 8 : 4}
+                  fill="#d4ff3a"
+                  opacity={linkPreview.overItemId && linkPreview.overItemId !== linkPreview.fromId ? 0.9 : 0.5}
+                />
+              </g>
+            )}
           </svg>
 
           <div
@@ -342,56 +501,98 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
             </div>
           )}
 
-          {items.map((it) => (
-            <BoardItemCard
-              key={it.id}
-              item={it}
-              selected={selectedId === it.id}
-              promptOpen={promptCard === it.id}
-              onClick={() => setSelectedId(it.id)}
-              onOpenPrompt={() => setPromptCard(it.id === promptCard ? null : it.id)}
-              onShotClick={onShot}
-              mode={mode}
-            />
-          ))}
+          {items.map((it) => {
+            const isDragging = dragging?.id === it.id;
+            const displayItem = isDragging
+              ? { ...it, x: dragging!.x, y: dragging!.y }
+              : it;
+            const isLinkSource = linkPreview?.fromId === it.id;
+            const isLinkTarget =
+              !!linkPreview &&
+              linkPreview.overItemId === it.id &&
+              linkPreview.fromId !== it.id;
+            return (
+              <BoardItemCard
+                key={it.id}
+                item={displayItem}
+                selected={selectedId === it.id}
+                promptOpen={promptCard === it.id}
+                dragging={isDragging}
+                linkSource={isLinkSource}
+                linkTarget={isLinkTarget}
+                onClick={() => setSelectedId(it.id)}
+                onOpenPrompt={() => setPromptCard(it.id === promptCard ? null : it.id)}
+                onShotClick={onShot}
+                onPointerDown={(e) => handleItemPointerDown(e, it)}
+                onHoverChange={(h) => setHoveringItem(h)}
+                mode={mode}
+              />
+            );
+          })}
+        </div>
 
-          {/* Plus add slot */}
+        {/* Shift-drag to link hint — only while hovering an item and not already dragging */}
+        {hoveringItem && !dragging && !linkPreview && (
           <div
             style={{
               position: "absolute",
-              left: 820,
-              top: 410,
-              width: 170,
-              height: 180,
-              border: "1.5px dashed var(--iron-2)",
-              borderRadius: 10,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
+              bottom: 18,
+              left: "50%",
+              transform: "translateX(-50%)",
+              padding: "5px 10px",
+              background: "rgba(20,20,22,0.9)",
+              backdropFilter: "blur(12px)",
+              border: "1px solid var(--iron-2)",
+              borderRadius: 6,
+              fontSize: 10,
+              fontFamily: "var(--f-mono)",
+              letterSpacing: 1,
               color: "var(--slate-2)",
-              fontSize: 11,
-              cursor: "pointer",
+              pointerEvents: "none",
+              zIndex: 15,
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
             }}
           >
-            <div
+            <span
               style={{
-                width: 38,
-                height: 38,
-                borderRadius: "50%",
-                background: "rgba(212,255,58,0.08)",
-                color: "var(--lime)",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
+                padding: "1px 5px",
+                borderRadius: 3,
+                background: "var(--iron-2)",
+                color: "var(--bone)",
+                fontSize: 9,
               }}
             >
-              <I.Sparkles size={18} />
-            </div>
-            <div>New generation</div>
+              SHIFT
+            </span>
+            <span>+ drag to link</span>
           </div>
-        </div>
+        )}
+        {linkPreview && (
+          <div
+            style={{
+              position: "absolute",
+              bottom: 18,
+              left: "50%",
+              transform: "translateX(-50%)",
+              padding: "5px 10px",
+              background: "rgba(212,255,58,0.15)",
+              border: "1px solid rgba(212,255,58,0.5)",
+              borderRadius: 6,
+              fontSize: 10,
+              fontFamily: "var(--f-mono)",
+              letterSpacing: 1,
+              color: "var(--lime)",
+              pointerEvents: "none",
+              zIndex: 15,
+            }}
+          >
+            {linkPreview.overItemId && linkPreview.overItemId !== linkPreview.fromId
+              ? "DROP TO LINK"
+              : "DRAG OVER AN ITEM TO LINK"}
+          </div>
+        )}
 
         {openCardItem && (
           <PromptCard
@@ -411,26 +612,57 @@ function BoardItemCard({
   item,
   selected,
   promptOpen,
+  dragging,
+  linkSource,
+  linkTarget,
   onClick,
   onOpenPrompt,
   onShotClick,
+  onPointerDown,
+  onHoverChange,
   mode,
 }: {
   item: DBBoardItemUI;
   selected: boolean;
   promptOpen: boolean;
+  dragging?: boolean;
+  linkSource?: boolean;
+  linkTarget?: boolean;
   onClick: () => void;
   onOpenPrompt: () => void;
   onShotClick: (n: number) => void;
+  onPointerDown?: (e: React.PointerEvent<HTMLDivElement>) => void;
+  onHoverChange?: (hovering: boolean) => void;
   mode: Mode;
 }) {
   const img = shotURI({ id: item.id, kind: item.kind, tone: item.tone, w: 400, h: 500 });
   const isGen = !!item.generated;
   const fallback = fallbackPrompt(item.filename);
   const usedInShot = fallback?.usedInShot;
+  // Visual border/shadow priority: link target > drag > selected > default
+  const border = linkTarget
+    ? "2px solid var(--lime)"
+    : dragging || linkSource
+    ? "2px solid var(--lime)"
+    : selected
+    ? "2px solid var(--lime)"
+    : isGen
+    ? "1px solid rgba(212,255,58,0.3)"
+    : "1px solid var(--iron-2)";
+  const boxShadow = dragging || linkSource
+    ? "0 0 0 6px rgba(212,255,58,0.22), 0 20px 40px rgba(0,0,0,0.6)"
+    : linkTarget
+    ? "0 0 0 6px rgba(212,255,58,0.3), 0 20px 40px rgba(0,0,0,0.6)"
+    : selected
+    ? "0 0 0 4px rgba(212,255,58,0.12), 0 20px 40px rgba(0,0,0,0.5)"
+    : "0 12px 24px rgba(0,0,0,0.4)";
   return (
     <div
+      data-board-item-id={item.id}
       onClick={onClick}
+      onPointerDown={onPointerDown}
+      onPointerEnter={() => onHoverChange?.(true)}
+      onPointerLeave={() => onHoverChange?.(false)}
       style={{
         position: "absolute",
         left: item.x,
@@ -439,17 +671,13 @@ function BoardItemCard({
         height: item.h,
         borderRadius: 8,
         overflow: "hidden",
-        border: selected
-          ? "2px solid var(--lime)"
-          : isGen
-          ? "1px solid rgba(212,255,58,0.3)"
-          : "1px solid var(--iron-2)",
-        boxShadow: selected
-          ? "0 0 0 4px rgba(212,255,58,0.12), 0 20px 40px rgba(0,0,0,0.5)"
-          : "0 12px 24px rgba(0,0,0,0.4)",
-        cursor: "pointer",
+        border,
+        boxShadow,
+        cursor: dragging ? "grabbing" : "grab",
         background: `url("${img}") center/cover`,
-        transition: "all 180ms var(--e-out)",
+        transition: dragging ? "none" : "border 180ms var(--e-out), box-shadow 180ms var(--e-out)",
+        zIndex: dragging ? 30 : linkSource ? 25 : 1,
+        touchAction: "none",
       }}
     >
       <div

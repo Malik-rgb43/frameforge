@@ -35,6 +35,8 @@ export interface DBBoardItem {
   video_model: string | null;
   source_item_id: string | null;
   status: ShotStatus | null;
+  image_url: string | null;
+  storage_path: string | null;
   created_at: string;
 }
 
@@ -54,6 +56,8 @@ export interface DBBoardItemUI extends BoardItem {
   videoPrompt?: string | null;
   videoModel?: string | null;
   sourceItemId?: string | null;
+  imageUrl?: string | null;
+  storagePath?: string | null;
 }
 
 export interface BoardItemInput {
@@ -99,6 +103,8 @@ export function dbToBoardItem(row: DBBoardItem): DBBoardItemUI {
     videoPrompt: row.video_prompt,
     videoModel: row.video_model,
     sourceItemId: row.source_item_id,
+    imageUrl: row.image_url,
+    storagePath: row.storage_path,
   };
 }
 
@@ -192,6 +198,27 @@ export async function deleteBoardItem(
 ): Promise<void> {
   const { error } = await client.from("board_items").delete().eq("id", id);
   if (error) throw error;
+}
+
+export async function createConnection(
+  client: SupabaseClient,
+  projectId: string,
+  fromItemId: string,
+  toItemId: string,
+  relationType: RefLink["kind"] = "reference"
+): Promise<RefLink> {
+  const { data, error } = await client
+    .from("connections")
+    .insert({
+      project_id: projectId,
+      from_item_id: fromItemId,
+      to_item_id: toItemId,
+      relation_type: relationType,
+    })
+    .select()
+    .single();
+  if (error) throw error;
+  return dbToRefLink(data as DBConnection);
 }
 
 // ─────────────────────────────────────────────────────────
