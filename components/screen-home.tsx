@@ -51,7 +51,7 @@ export default function ScreenHome({
               marginBottom: 10,
             }}
           >
-            FRAMEFORGE \u00B7 v2.4
+            FRAMEFORGE \· v2.4
           </div>
           <div
             style={{
@@ -245,7 +245,7 @@ function ProjectCard({ p, onClick, index }: { p: Project; onClick: () => void; i
             <I.Film size={11} style={{ verticalAlign: -2, marginRight: 4 }} />
             {p.shots} shots
           </span>
-          <span>\u00B7</span>
+          <span>\·</span>
           <span>{p.updated}</span>
         </div>
       </div>

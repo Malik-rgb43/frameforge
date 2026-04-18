@@ -201,7 +201,7 @@ export function AppHeader({
             border: "1px solid var(--iron)",
           }}
         >
-          Ctrl\u00B7K
+          Ctrl\·K
         </span>
       </div>
 

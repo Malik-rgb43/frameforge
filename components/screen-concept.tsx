@@ -39,7 +39,7 @@ export default function ScreenConcept({ onNext }: { onNext: () => void }) {
             letterSpacing: -0.2,
           }}
         >
-          AURA \u00B7 Morning Campaign
+          AURA \· Morning Campaign
         </div>
         <Field label="Goal">
           <Textarea rows={3} value="Launch of AURA's signature serum. Reposition as a quiet luxury ritual, not skincare." />
@@ -113,7 +113,7 @@ export default function ScreenConcept({ onNext }: { onNext: () => void }) {
               color: "var(--lime)",
             }}
           >
-            STEP 2 \u00B7 PICK A DIRECTION
+            STEP 2 \· PICK A DIRECTION
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 18 }}>
@@ -246,7 +246,7 @@ function ConceptCard({
           marginBottom: 4,
         }}
       >
-        CONCEPT \u00B7 {String(idx + 1).padStart(2, "0")}
+        CONCEPT \· {String(idx + 1).padStart(2, "0")}
       </div>
       <div
         style={{

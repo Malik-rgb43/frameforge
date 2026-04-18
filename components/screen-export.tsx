@@ -18,7 +18,7 @@ export default function ScreenExport() {
         <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 18 }}>
           <div>
             <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", letterSpacing: 1.5, color: "var(--lime)" }}>
-              FINAL \u00B7 READY TO EXPORT
+              FINAL \· READY TO EXPORT
             </div>
             <div
               style={{
@@ -29,7 +29,7 @@ export default function ScreenExport() {
                 marginTop: 2,
               }}
             >
-              Weightless Ritual \u00B7 v3
+              Weightless Ritual \· v3
             </div>
           </div>
           <div style={{ flex: 1 }} />
@@ -71,7 +71,7 @@ export default function ScreenExport() {
               color: "var(--bone)",
             }}
           >
-            9:16 \u00B7 12.0s \u00B7 1080p
+            9:16 \· 12.0s \· 1080p
           </div>
           <div
             style={{
@@ -205,10 +205,10 @@ export default function ScreenExport() {
           <Field label="Format">
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
               {[
-                { id: "mp4-h264" as Format, label: "MP4 \u00B7 H.264", sub: "Universal" },
-                { id: "mp4-h265" as Format, label: "MP4 \u00B7 H.265", sub: "4K-ready" },
+                { id: "mp4-h264" as Format, label: "MP4 \· H.264", sub: "Universal" },
+                { id: "mp4-h265" as Format, label: "MP4 \· H.265", sub: "4K-ready" },
                 { id: "prores"   as Format, label: "ProRes",            sub: "Editing" },
-                { id: "webm"     as Format, label: "WebM \u00B7 VP9",   sub: "Web" },
+                { id: "webm"     as Format, label: "WebM \· VP9",   sub: "Web" },
               ].map((f) => {
                 const sel = f.id === format;
                 return (
@@ -256,10 +256,10 @@ export default function ScreenExport() {
           <Field label="Variations" hint="Automatic re-cuts for different placements.">
             <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
               {[
-                { label: "9:16 \u00B7 TikTok/Reels", on: true,  size: "12s" },
-                { label: "1:1 \u00B7 Feed post",     on: true,  size: "10s" },
-                { label: "16:9 \u00B7 YouTube",      on: false, size: "15s" },
-                { label: "9:16 \u00B7 6s cut",       on: true,  size: "6s" },
+                { label: "9:16 \· TikTok/Reels", on: true,  size: "12s" },
+                { label: "1:1 \· Feed post",     on: true,  size: "10s" },
+                { label: "16:9 \· YouTube",      on: false, size: "15s" },
+                { label: "9:16 \· 6s cut",       on: true,  size: "6s" },
               ].map((v) => (
                 <div
                   key={v.label}
@@ -313,7 +313,7 @@ export default function ScreenExport() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--bone)" }}>Premiere + DaVinci</div>
                 <div style={{ fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>
-                  4 shots \u00B7 3 variants \u00B7 1 LUT
+                  4 shots \· 3 variants \· 1 LUT
                 </div>
               </div>
               <Toggle checked={true} />
@@ -333,7 +333,7 @@ export default function ScreenExport() {
               }}
             >
               <Toggle checked={true} />
-              <div style={{ fontSize: 12, color: "var(--bone)" }}>Burn-in \u00B7 EN \u00B7 Auto-synced</div>
+              <div style={{ fontSize: 12, color: "var(--bone)" }}>Burn-in \· EN \· Auto-synced</div>
             </div>
           </Field>
         </div>

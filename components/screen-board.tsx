@@ -50,7 +50,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
               letterSpacing: 1,
             }}
           >
-            REFERENCES \u00B7 4
+            REFERENCES \· 4
           </div>
           {items.filter((i) => i.isRef).map((i) => (
             <AssetRow
@@ -69,7 +69,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
               letterSpacing: 1,
             }}
           >
-            GENERATED \u00B7 2
+            GENERATED \· 2
           </div>
           {items.filter((i) => i.generated).map((i) => (
             <AssetRow
@@ -181,7 +181,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
             }}
           >
             <span>100%</span>
-            <span style={{ opacity: 0.4 }}>\u00B7</span>
+            <span style={{ opacity: 0.4 }}>\·</span>
             <span>
               <StatusDot status="ready" />
               Saved
@@ -255,7 +255,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
               letterSpacing: 2,
             }}
           >
-            GENERATED \u00B7 {mode.toUpperCase()}
+            GENERATED \· {mode.toUpperCase()}
           </div>
 
           {items.map((it) => (
@@ -385,7 +385,7 @@ function BoardItemCard({
       >
         {isGen ? (
           <>
-            <span style={{ color: "var(--lime)" }}>●</span> GEN \u00B7 {item.model?.split(" ")[0]}
+            <span style={{ color: "var(--lime)" }}>●</span> GEN \· {item.model?.split(" ")[0]}
           </>
         ) : (
           <>{item.tag?.toUpperCase() || "REF"}</>
@@ -414,7 +414,7 @@ function BoardItemCard({
               color: "var(--bone)",
             }}
           >
-            ▶ 2.0s \u00B7 24fps
+            ▶ 2.0s \· 24fps
           </div>
           <div
             style={{
@@ -644,7 +644,7 @@ function PromptCard({
               color: "var(--bone)",
             }}
           >
-            {tab === "video" ? `VIDEO \u00B7 ${p.videoModel || "Seedance 2"}` : `IMAGE \u00B7 ${item.model}`}
+            {tab === "video" ? `VIDEO \· ${p.videoModel || "Seedance 2"}` : `IMAGE \· ${item.model}`}
           </div>
           {tab === "video" && (
             <div
@@ -772,7 +772,7 @@ function PromptCard({
                     color: "var(--bone)",
                   }}
                 >
-                  <span>9:16 \u00B7 Vertical</span>
+                  <span>9:16 \· Vertical</span>
                   <I.ChevDown size={12} />
                 </div>
               </Field>
@@ -863,7 +863,7 @@ function PromptCard({
         }}
       >
         <div style={{ fontSize: 11, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>
-          <span style={{ color: "var(--lime)" }}>~4s</span> \u00B7 $0.08
+          <span style={{ color: "var(--lime)" }}>~4s</span> \· $0.08
         </div>
         <div style={{ flex: 1 }} />
         <Btn size="sm" variant="ghost" icon={<I.Refresh size={12} />}>Variations</Btn>

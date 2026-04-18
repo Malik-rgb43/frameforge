@@ -40,7 +40,7 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
       <div style={{ padding: "20px 28px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", letterSpacing: 1.5, color: "var(--slate-2)" }}>
-            STORYBOARD \u00B7 {SEED_SHOTS.length} SHOTS \u00B7 {totalDur.toFixed(1)}S
+            STORYBOARD \· {SEED_SHOTS.length} SHOTS \· {totalDur.toFixed(1)}S
           </div>
           <div
             style={{
@@ -96,7 +96,7 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
               color: "var(--bone)",
             }}
           >
-            SHOT {String(selected.n).padStart(2, "0")} \u00B7 {selected.duration.toFixed(1)}s
+            SHOT {String(selected.n).padStart(2, "0")} \· {selected.duration.toFixed(1)}s
           </div>
           {selected.status === "generating" && (
             <div
@@ -113,7 +113,7 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
               }}
             >
               <I.Loader size={28} style={{ animation: "spin 1.2s linear infinite" }} />
-              <div style={{ fontSize: 11, fontFamily: "var(--f-mono)", letterSpacing: 1.5 }}>GENERATING \u00B7 67%</div>
+              <div style={{ fontSize: 11, fontFamily: "var(--f-mono)", letterSpacing: 1.5 }}>GENERATING \· 67%</div>
               <div style={{ width: 120, height: 3, background: "rgba(255,255,255,0.1)", borderRadius: 2 }}>
                 <div style={{ width: "67%", height: "100%", background: "var(--amber)", borderRadius: 2 }} />
               </div>
@@ -250,7 +250,7 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
             marginBottom: 6,
           }}
         >
-          <span>TIMELINE \u00B7 {totalDur.toFixed(1)}s</span>
+          <span>TIMELINE \· {totalDur.toFixed(1)}s</span>
           <div style={{ flex: 1 }} />
           <span>
             {scrub.toFixed(1)}s / {totalDur.toFixed(1)}s
@@ -441,7 +441,7 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
               }}
             >
               <I.Music size={10} style={{ marginRight: 6 }} />
-              <span>Soundtrack \u00B7 Ambient \u00B7 72 BPM \u00B7 generated</span>
+              <span>Soundtrack \· Ambient \· 72 BPM \· generated</span>
               <div style={{ flex: 1 }} />
               <div style={{ display: "flex", gap: 1, alignItems: "center" }}>
                 {Array.from({ length: 80 }).map((_, i) => (
