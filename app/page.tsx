@@ -52,17 +52,13 @@ function useProjects() {
   return { rows, loading, error, refresh, supabase };
 }
 
-// Per-project idempotent seeding. Runs once per (browser session, project id)
-// so re-opening the same project doesn't re-hit the DB.
-// Board is intentionally NOT seeded — new projects open with an empty canvas
-// the user populates themselves. Concepts and shots still seed so other
-// screens have something to show.
+// All screens start empty. User populates via upload + AI generation.
+// No seed/demo content anywhere.
 async function ensureProjectSeeded(
-  supabase: ReturnType<typeof createClient>,
-  projectId: string
+  _supabase: ReturnType<typeof createClient>,
+  _projectId: string
 ): Promise<void> {
-  await seedDemoShots(supabase, projectId);
-  await seedDemoConcepts(supabase, projectId);
+  /* intentionally empty — no seeding */
 }
 
 export default function App() {

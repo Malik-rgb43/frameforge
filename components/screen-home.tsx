@@ -2,7 +2,7 @@
 import React, { useState } from "react";
 import { I } from "./icons";
 import { Btn, Segmented, StatusDot, iconBtnStyle } from "./ui";
-import { DEFAULT_PROJECTS, shotURI, type Project, type ProjectStatus } from "@/lib/data";
+import { shotURI, type Project, type ProjectStatus } from "@/lib/data";
 
 type FilterValue = "all" | ProjectStatus;
 
@@ -17,7 +17,7 @@ export default function ScreenHome({
 }) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [filter, setFilter] = useState<FilterValue>("all");
-  const source = projectsProp ?? DEFAULT_PROJECTS;
+  const source = projectsProp ?? [];
   const projects = source.filter((p) => filter === "all" || p.status === filter);
 
   return (

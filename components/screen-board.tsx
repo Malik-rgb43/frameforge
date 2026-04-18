@@ -69,17 +69,11 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
     let active = true;
     async function load() {
       if (!projectId) {
-        // Static preview fallback — matches the original design exactly.
+        // No real project open — show empty board, user creates/opens one.
         if (!active) return;
-        const staticItems: DBBoardItemUI[] = SEED_PRODUCT_IMAGES.map((s) => ({
-          ...s,
-          imagePrompt: SEED_PROMPTS[s.id]?.image,
-          videoPrompt: SEED_PROMPTS[s.id]?.video,
-          videoModel: SEED_PROMPTS[s.id]?.videoModel,
-        }));
-        setItems(staticItems);
-        setLinks(SEED_REF_LINKS);
-        setPromptCard(staticItems.find((i) => i.generated)?.id ?? null);
+        setItems([]);
+        setLinks([]);
+        setPromptCard(null);
         setLoading(false);
         return;
       }
