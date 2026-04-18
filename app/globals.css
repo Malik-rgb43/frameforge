@@ -1,0 +1,78 @@
+:root {
+  --obsidian: #0b0b0d;
+  --graphite: #141416;
+  --onyx:     #16171a;
+  --ash:      #1c1e22;
+  --smoke:    #1a1b1f;
+  --iron:     #26272b;
+  --iron-2:   #2e2f34;
+
+  --bone:      #f5f5f4;
+  --ash-gray:  #a1a1aa;
+  --slate:     #52525b;
+  --slate-2:   #71717a;
+
+  --lime:      #d4ff3a;
+  --lime-ink:  #0a0a0c;
+  --lime-glow: 0 0 32px rgba(212,255,58,0.35);
+  --cyan:      #7df9ff;
+  --mint:      #4ade80;
+  --amber:     #fbbf24;
+  --coral:     #ff5a5f;
+
+  --r-card:  12px;
+  --r-input: 8px;
+  --r-btn:   8px;
+  --r-pill:  999px;
+
+  --f-display: var(--font-ui), -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+  --f-ui:      var(--font-ui), -apple-system, BlinkMacSystemFont, sans-serif;
+  --f-mono:    var(--font-mono), "SF Mono", ui-monospace, monospace;
+
+  --e-out:    cubic-bezier(0.16, 1, 0.3, 1);
+  --e-in-out: cubic-bezier(0.65, 0, 0.35, 1);
+
+  --accent: var(--lime);
+  --accent-ink: var(--lime-ink);
+}
+html, body {
+  margin: 0; padding: 0;
+  background:
+    radial-gradient(1200px 700px at 18% -10%, rgba(125,249,255,0.04), transparent 60%),
+    radial-gradient(900px 500px at 110% 10%, rgba(212,255,58,0.04), transparent 60%),
+    #050507;
+  color: var(--bone);
+  font-family: var(--f-ui);
+  -webkit-font-smoothing: antialiased;
+  min-height: 100vh;
+  overflow-x: auto;
+}
+* { box-sizing: border-box; }
+::selection { background: var(--lime); color: var(--lime-ink); }
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.06); border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.12); }
+button { font-family: inherit; }
+input, textarea { font-family: inherit; }
+
+@keyframes pulse-amber {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0.5); }
+  50%      { box-shadow: 0 0 0 4px rgba(251,191,36,0.0); }
+}
+@keyframes lime-pulse {
+  0%, 100% { opacity: 0.6; }
+  50%      { opacity: 1; }
+}
+@keyframes dash-march {
+  to { stroke-dashoffset: -20; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes float-fade {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes stagger-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
