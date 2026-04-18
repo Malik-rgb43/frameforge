@@ -1,8 +1,16 @@
 "use client";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { I } from "./icons";
 import { Btn, Chip, Field, Input, SlideOver, Textarea, Toggle, iconBtnStyle } from "./ui";
-import { ASPECTS, MODELS, SEED_COLLABORATORS, type Project } from "@/lib/data";
+import { ASPECTS, MODELS, type Project } from "@/lib/data";
+import { createClient } from "@/lib/supabase-client";
+import {
+  inviteCollaborator,
+  isValidEmail,
+  listCollaborators,
+  removeCollaborator,
+  type CollaboratorRow,
+} from "@/lib/collab-queries";
 
 type TabId = "general" | "brand" | "team" | "models" | "export";
 
@@ -64,7 +72,7 @@ export default function ProjectSettings({
         <div style={{ flex: 1, padding: 18, overflow: "auto" }}>
           {tab === "general" && <GeneralTab project={project} />}
           {tab === "brand" && <BrandTab />}
-          {tab === "team" && <TeamTab />}
+          {tab === "team" && <TeamTab projectId={project?.id ?? null} />}
           {tab === "models" && <ModelsTab />}
           {tab === "export" && <ExportTab />}
         </div>
@@ -247,16 +255,234 @@ function BrandTab() {
   );
 }
 
-function TeamTab() {
+function TeamTab({ projectId }: { projectId: string | null }) {
+  const supabase = useMemo(() => createClient(), []);
+  const [rows, setRows] = useState<CollaboratorRow[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loadErr, setLoadErr] = useState<string | null>(null);
+
+  const [email, setEmail] = useState("");
+  const [role, setRole] = useState<"editor" | "viewer">("editor");
+  const [sending, setSending] = useState(false);
+  const [sendErr, setSendErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const refresh = useCallback(async () => {
+    if (!projectId) return;
+    setLoading(true);
+    setLoadErr(null);
+    try {
+      const list = await listCollaborators(supabase, projectId);
+      setRows(list);
+    } catch (err) {
+      setLoadErr(err instanceof Error ? err.message : "Failed to load team.");
+    } finally {
+      setLoading(false);
+    }
+  }, [projectId, supabase]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function handleInvite(e?: React.FormEvent) {
+    if (e) e.preventDefault();
+    if (!projectId) {
+      setSendErr("Save the project before inviting teammates.");
+      return;
+    }
+    const trimmed = email.trim().toLowerCase();
+    if (!isValidEmail(trimmed)) {
+      setSendErr("Enter a valid email address.");
+      return;
+    }
+    if (rows.some((r) => r.invited_email === trimmed)) {
+      setSendErr("That email is already on the team.");
+      return;
+    }
+    setSending(true);
+    setSendErr(null);
+    try {
+      await inviteCollaborator(supabase, projectId, trimmed, role);
+      setEmail("");
+      await refresh();
+    } catch (err) {
+      setSendErr(err instanceof Error ? err.message : "Invite failed.");
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function handleRemove(rowId: string) {
+    try {
+      await removeCollaborator(supabase, rowId);
+      setRows((prev) => prev.filter((r) => r.id !== rowId));
+    } catch (err) {
+      setLoadErr(err instanceof Error ? err.message : "Remove failed.");
+    }
+  }
+
+  const shareLink =
+    projectId && typeof window !== "undefined"
+      ? `${window.location.origin}/invite/${projectId}`
+      : projectId
+        ? `/invite/${projectId}`
+        : "";
+
+  function copyLink() {
+    if (!shareLink || typeof navigator === "undefined") return;
+    try {
+      navigator.clipboard.writeText(shareLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1400);
+    } catch {
+      // ignore — clipboard may be unavailable
+    }
+  }
+
   return (
     <>
       <div style={{ display: "flex", alignItems: "center", marginBottom: 14 }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: "var(--bone)" }}>Team</div>
         <div style={{ flex: 1 }} />
-        <Btn size="sm" variant="primary" icon={<I.Plus size={12} />}>Invite</Btn>
+        {loading && (
+          <div
+            style={{
+              fontSize: 10,
+              fontFamily: "var(--f-mono)",
+              color: "var(--slate-2)",
+              letterSpacing: 1,
+            }}
+          >
+            LOADING…
+          </div>
+        )}
       </div>
+
+      {/* Invite form */}
+      <form onSubmit={handleInvite} style={{ marginBottom: 14 }}>
+        <div style={{ display: "flex", gap: 6 }}>
+          <div style={{ flex: 1 }}>
+            <Input
+              value={email}
+              onChange={setEmail}
+              placeholder="teammate@studio.co"
+            />
+          </div>
+          <div
+            style={{
+              display: "inline-flex",
+              padding: 2,
+              background: "var(--ash)",
+              border: "1px solid var(--iron)",
+              borderRadius: 6,
+              gap: 2,
+              height: 34,
+            }}
+          >
+            {(["editor", "viewer"] as const).map((r) => (
+              <button
+                key={r}
+                type="button"
+                onClick={() => setRole(r)}
+                style={{
+                  height: 28,
+                  padding: "0 10px",
+                  background: role === r ? "var(--iron-2)" : "transparent",
+                  color: role === r ? "var(--bone)" : "var(--ash-gray)",
+                  border: "none",
+                  borderRadius: 4,
+                  fontSize: 11,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  textTransform: "capitalize",
+                }}
+              >
+                {r}
+              </button>
+            ))}
+          </div>
+          <Btn
+            size="md"
+            variant="primary"
+            icon={<I.Plus size={12} />}
+            onClick={() => handleInvite()}
+            disabled={sending || !projectId}
+          >
+            {sending ? "Sending…" : "Invite"}
+          </Btn>
+          <button
+            type="submit"
+            style={{
+              width: 0,
+              height: 0,
+              padding: 0,
+              margin: 0,
+              border: 0,
+              opacity: 0,
+              position: "absolute",
+            }}
+            aria-hidden
+            tabIndex={-1}
+          />
+        </div>
+        {sendErr && (
+          <div
+            style={{
+              marginTop: 8,
+              padding: "6px 10px",
+              background: "rgba(255,90,95,0.08)",
+              border: "1px solid rgba(255,90,95,0.3)",
+              borderRadius: 6,
+              color: "var(--coral)",
+              fontSize: 11,
+            }}
+          >
+            {sendErr}
+          </div>
+        )}
+        {!projectId && (
+          <div style={{ fontSize: 11, color: "var(--slate-2)", marginTop: 6 }}>
+            This project hasn't been saved yet. Team features light up after
+            the first save.
+          </div>
+        )}
+      </form>
+
+      {loadErr && (
+        <div
+          style={{
+            marginBottom: 10,
+            padding: "6px 10px",
+            background: "rgba(255,90,95,0.08)",
+            border: "1px solid rgba(255,90,95,0.3)",
+            borderRadius: 6,
+            color: "var(--coral)",
+            fontSize: 11,
+          }}
+        >
+          {loadErr}
+        </div>
+      )}
+
+      {/* Collaborator list */}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {SEED_COLLABORATORS.map((u) => (
+        {rows.length === 0 && !loading && (
+          <div
+            style={{
+              padding: 14,
+              background: "var(--ash)",
+              border: "1px dashed var(--iron-2)",
+              borderRadius: 8,
+              fontSize: 12,
+              color: "var(--slate-2)",
+              textAlign: "center",
+            }}
+          >
+            No collaborators yet. Invite a teammate above.
+          </div>
+        )}
+        {rows.map((u) => (
           <div
             key={u.id}
             style={{
@@ -282,21 +508,53 @@ function TeamTab() {
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
+                opacity: u.accepted ? 1 : 0.7,
               }}
             >
               {u.initials}
             </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bone)" }}>{u.name}</div>
-              <div style={{ fontSize: 11, color: "var(--slate-2)" }}>{u.email}</div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div
+                style={{
+                  fontSize: 13,
+                  fontWeight: 500,
+                  color: "var(--bone)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {u.displayName}
+              </div>
+              <div
+                style={{
+                  fontSize: 11,
+                  color: "var(--slate-2)",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap",
+                }}
+              >
+                {u.invited_email}
+              </div>
             </div>
-            <Chip color={u.role === "Owner" ? "lime" : "default"}>{u.role}</Chip>
-            <button style={iconBtnStyle()}>
-              <I.Dots size={14} />
+            <Chip color={u.accepted ? "mint" : "amber"}>
+              {u.accepted ? "Active" : "Pending"}
+            </Chip>
+            <Chip color={u.role === "editor" ? "cyan" : "default"}>
+              {u.role}
+            </Chip>
+            <button
+              style={iconBtnStyle()}
+              title="Remove collaborator"
+              onClick={() => handleRemove(u.id)}
+            >
+              <I.Trash size={13} />
             </button>
           </div>
         ))}
       </div>
+
       <div style={{ height: 1, background: "var(--iron)", margin: "18px 0" }} />
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--bone)", marginBottom: 10 }}>Share link</div>
       <div
@@ -314,13 +572,24 @@ function TeamTab() {
         }}
       >
         <I.Link size={14} />
-        <div style={{ flex: 1 }}>frameforge.app/p/aura-morning/m8fK2x</div>
-        <Btn size="sm">Copy</Btn>
+        <div
+          style={{
+            flex: 1,
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            whiteSpace: "nowrap",
+          }}
+        >
+          {shareLink || "—"}
+        </div>
+        <Btn size="sm" onClick={copyLink} disabled={!shareLink}>
+          {copied ? "Copied" : "Copy"}
+        </Btn>
       </div>
       <div style={{ marginTop: 10, display: "flex", alignItems: "center", gap: 8 }}>
         <Toggle checked={true} />
         <div style={{ fontSize: 12, color: "var(--ash-gray)" }}>
-          Anyone with link can <b style={{ color: "var(--bone)" }}>view</b>
+          Recipients with an invite can <b style={{ color: "var(--bone)" }}>accept</b> after signing in
         </div>
       </div>
     </>
