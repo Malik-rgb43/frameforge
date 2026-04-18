@@ -185,7 +185,7 @@ export function shotSVG({
       <text x="${w * 0.5}" y="${h * 0.555}" text-anchor="middle"
             font-family="Inter, sans-serif" font-size="${w * 0.034}" font-weight="700" fill="${p.body}" letter-spacing="4">AURA</text>
       <text x="${w * 0.5}" y="${h * 0.6}" text-anchor="middle"
-            font-family="JetBrains Mono" font-size="${w * 0.019}" fill="${p.body}" opacity="0.7" letter-spacing="2">SERUM \· 30ML</text>
+            font-family="JetBrains Mono" font-size="${w * 0.019}" fill="${p.body}" opacity="0.7" letter-spacing="2">SERUM · 30ML</text>
     `;
   } else if (kind === "jar") {
     body = `
@@ -198,7 +198,7 @@ export function shotSVG({
       <text x="${w * 0.5}" y="${h * 0.625}" text-anchor="middle"
             font-family="Inter, sans-serif" font-size="${w * 0.04}" font-weight="700" fill="${p.body}" letter-spacing="3">RITUAL</text>
       <text x="${w * 0.5}" y="${h * 0.67}" text-anchor="middle"
-            font-family="JetBrains Mono" font-size="${w * 0.018}" fill="${p.body}" opacity="0.7" letter-spacing="2">50ML \· NIGHT BALM</text>
+            font-family="JetBrains Mono" font-size="${w * 0.018}" fill="${p.body}" opacity="0.7" letter-spacing="2">50ML · NIGHT BALM</text>
     `;
   } else if (kind === "pouch") {
     body = `
@@ -215,7 +215,7 @@ export function shotSVG({
             font-family="Inter, sans-serif" font-size="${w * 0.055}" font-weight="700" fill="${p.label}" letter-spacing="6">CLUB</text>
       <line x1="${w * 0.34}" y1="${h * 0.53}" x2="${w * 0.66}" y2="${h * 0.53}" stroke="${p.label}" stroke-width="1" opacity="0.4"/>
       <text x="${w * 0.5}" y="${h * 0.6}" text-anchor="middle"
-            font-family="JetBrains Mono" font-size="${w * 0.02}" fill="${p.label}" opacity="0.6" letter-spacing="3">SINGLE ORIGIN \· 250G</text>
+            font-family="JetBrains Mono" font-size="${w * 0.02}" fill="${p.label}" opacity="0.6" letter-spacing="3">SINGLE ORIGIN · 250G</text>
     `;
   } else if (kind === "sneaker") {
     body = `
@@ -269,7 +269,7 @@ export function shotSVG({
       <circle cx="${w * 0.62}" cy="${h * 0.55}" r="${w * 0.015}" fill="${p.rim}" opacity="0.6"/>
       <circle cx="${w * 0.48}" cy="${h * 0.62}" r="${w * 0.025}" fill="${p.rim}" opacity="0.7"/>
       <text x="${w * 0.5}" y="${h * 0.92}" text-anchor="middle"
-            font-family="JetBrains Mono" font-size="${w * 0.018}" fill="${p.label}" opacity="0.4" letter-spacing="3">MACRO \· DROPLETS</text>
+            font-family="JetBrains Mono" font-size="${w * 0.018}" fill="${p.label}" opacity="0.4" letter-spacing="3">MACRO · DROPLETS</text>
     `;
   }
 
@@ -341,14 +341,14 @@ export const DEFAULT_PROJECTS: Project[] = [
 ];
 
 export const MODELS = [
-  { id: "seedance-2", label: "Seedance 2", tag: "fast \· i2v" },
-  { id: "kling-3",    label: "Kling 3",    tag: "premium \· i2v" },
+  { id: "seedance-2", label: "Seedance 2", tag: "fast · i2v" },
+  { id: "kling-3",    label: "Kling 3",    tag: "premium · i2v" },
 ];
 
 export const ASPECTS = [
-  { id: "9:16" as Aspect, label: "9:16", name: "Vertical",  sub: "TikTok \· Reels", w: 9,  h: 16 },
-  { id: "1:1"  as Aspect, label: "1:1",  name: "Square",    sub: "Feed \· Grid",    w: 1,  h: 1 },
-  { id: "16:9" as Aspect, label: "16:9", name: "Landscape", sub: "YT \· Web",       w: 16, h: 9 },
+  { id: "9:16" as Aspect, label: "9:16", name: "Vertical",  sub: "TikTok · Reels", w: 9,  h: 16 },
+  { id: "1:1"  as Aspect, label: "1:1",  name: "Square",    sub: "Feed · Grid",    w: 1,  h: 1 },
+  { id: "16:9" as Aspect, label: "16:9", name: "Landscape", sub: "YT · Web",       w: 16, h: 9 },
   { id: "4:5"  as Aspect, label: "4:5",  name: "Portrait",  sub: "IG Portrait",         w: 4,  h: 5 },
 ];
 

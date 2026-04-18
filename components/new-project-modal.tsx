@@ -136,10 +136,10 @@ export default function NewProjectModal({
               </div>
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
                 {[
-                  { id: "upload",   icon: <I.Upload size={20} />,   title: "Upload product photos", sub: "3–10 images \· auto-tagged" },
+                  { id: "upload",   icon: <I.Upload size={20} />,   title: "Upload product photos", sub: "3–10 images · auto-tagged" },
                   { id: "prompt",   icon: <I.Sparkles size={20} />, title: "Describe it",            sub: "AI generates references" },
-                  { id: "import",   icon: <I.Link size={20} />,     title: "Import from URL",        sub: "Shopify \· Amazon \· image URL" },
-                  { id: "template", icon: <I.Grid size={20} />,     title: "Use a template",         sub: "Skincare \· Apparel \· Food" },
+                  { id: "import",   icon: <I.Link size={20} />,     title: "Import from URL",        sub: "Shopify · Amazon · image URL" },
+                  { id: "template", icon: <I.Grid size={20} />,     title: "Use a template",         sub: "Skincare · Apparel · Food" },
                 ].map((m) => {
                   const sel = m.id === mode;
                   return (
@@ -188,7 +188,7 @@ export default function NewProjectModal({
                     <span style={{ color: "var(--lime)", textDecoration: "underline" }}>browse</span>
                   </div>
                   <div style={{ fontSize: 10, color: "var(--slate)", fontFamily: "var(--f-mono)" }}>
-                    PNG \· JPG \· WebP \· up to 20MB
+                    PNG · JPG · WebP · up to 20MB
                   </div>
                 </div>
               )}

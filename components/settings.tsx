@@ -183,7 +183,7 @@ function BrandTab() {
         >
           <div style={{ fontSize: 24, fontWeight: 700, letterSpacing: 4, color: "var(--bone)" }}>AURA</div>
           <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", letterSpacing: 2 }}>
-            LOGO.SVG \· 4.2 KB
+            LOGO.SVG · 4.2 KB
           </div>
         </div>
       </Field>
@@ -661,10 +661,10 @@ function ModelsTab() {
           <Toggle checked={true} />
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 12, color: "var(--bone)" }}>
-              Lock to <b>AURA \· bottle ref #1</b>
+              Lock to <b>AURA · bottle ref #1</b>
             </div>
             <div style={{ fontSize: 10, color: "var(--slate-2)", marginTop: 2, fontFamily: "var(--f-mono)" }}>
-              Token: auralite_v3 \· 4 references pinned
+              Token: auralite_v3 · 4 references pinned
             </div>
           </div>
         </div>
@@ -690,7 +690,7 @@ function ExportTab() {
       <div style={{ fontSize: 13, fontWeight: 600, color: "var(--bone)", marginBottom: 14 }}>Export defaults</div>
       <Field label="Format">
         <div style={{ display: "flex", gap: 6 }}>
-          {["MP4 \· H.264", "MP4 \· H.265", "ProRes", "WebM"].map((f, i) => (
+          {["MP4 · H.264", "MP4 · H.265", "ProRes", "WebM"].map((f, i) => (
             <button
               key={f}
               style={{
