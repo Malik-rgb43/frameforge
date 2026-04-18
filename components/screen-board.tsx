@@ -21,6 +21,8 @@ import {
 import { beginDrag, findBoardItemIdFromEl } from "@/lib/drag-utils";
 import UploadZone from "./upload-zone";
 import { generateShots } from "@/lib/ai-queries";
+import { createShot, listShots } from "@/lib/queries-shots";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type Mode = "image" | "video";
 
@@ -724,6 +726,9 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
             mode={mode}
             onClose={() => setPromptCard(null)}
             onChangeMode={setMode}
+            supabase={supabase}
+            projectId={projectId ?? null}
+            onRefresh={refetchItems}
           />
         )}
       </div>
@@ -995,23 +1000,120 @@ function PromptCard({
   mode,
   onClose,
   onChangeMode,
+  supabase,
+  projectId,
+  onRefresh,
 }: {
   item: DBBoardItemUI;
   allItems: DBBoardItemUI[];
   mode: Mode;
   onClose: () => void;
   onChangeMode: (m: Mode) => void;
+  supabase: SupabaseClient;
+  projectId: string | null;
+  onRefresh: () => Promise<void>;
 }) {
   const fb = fallbackPrompt(item.filename);
-  const p = {
-    image: item.imagePrompt || fb?.image || "",
-    video: item.videoPrompt || fb?.video || "",
-    videoModel: item.videoModel || fb?.videoModel || "Seedance 2",
-  };
+  const initialImage = item.imagePrompt || fb?.image || "";
+  const initialVideo = item.videoPrompt || fb?.video || "";
+  const videoModelLabel = item.videoModel || fb?.videoModel || "Seedance 2";
   const [tab, setTab] = useState<Mode>(mode);
   useEffect(() => setTab(mode), [mode]);
 
+  const [imgText, setImgText] = useState(initialImage);
+  const [vidText, setVidText] = useState(initialVideo);
+  useEffect(() => setImgText(initialImage), [item.id, initialImage]);
+  useEffect(() => setVidText(initialVideo), [item.id, initialVideo]);
+
+  const [busy, setBusy] = useState<null | "regen" | "variants" | "useInShot">(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [toast, setToast] = useState<string | null>(null);
+
   const refItems = allItems.filter((i) => i.isRef).slice(0, 3);
+
+  async function savePrompt(kind: "image" | "video", next: string) {
+    const current = kind === "image" ? initialImage : initialVideo;
+    if (next === current) return;
+    if (!projectId) return;
+    try {
+      await updateBoardItem(
+        supabase,
+        item.id,
+        kind === "image" ? { image_prompt: next } : { video_prompt: next }
+      );
+      await onRefresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Save failed");
+    }
+  }
+
+  async function handleGenerate(count: number, which: "regen" | "variants") {
+    if (!projectId || busy) return;
+    setBusy(which);
+    setErr(null);
+    setToast(null);
+    try {
+      const res = await generateShots(projectId, {
+        referenceItemId: item.id,
+        count,
+        conceptTitle: "",
+        conceptHook: "",
+        productDescription: item.filename || "a premium product",
+      });
+      if (res.errors && res.errors.length > 0) {
+        setErr(res.errors[0]);
+      }
+      await onRefresh();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Generation failed");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function handleUseInShot() {
+    if (!projectId || busy) return;
+    setBusy("useInShot");
+    setErr(null);
+    setToast(null);
+    try {
+      const existing = await listShots(supabase, projectId);
+      await createShot(supabase, projectId, {
+        order_index: existing.length,
+        title: item.filename || "New shot",
+        ref_item_id: item.id,
+        duration: 2.5,
+        sequence_name: "SEQ 1",
+        aspect: "9:16",
+        model: "seedance-2",
+        video_prompt: vidText,
+        status: "ready",
+      });
+      setToast("Added to storyboard");
+      setTimeout(() => {
+        setToast(null);
+        onClose();
+      }, 900);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : "Could not add to storyboard");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  const taStyle: React.CSSProperties = {
+    width: "100%",
+    padding: 10,
+    background: "var(--ash)",
+    border: "1px solid var(--iron)",
+    borderRadius: 6,
+    color: "var(--bone)",
+    fontSize: 13,
+    outline: "none",
+    resize: "none",
+    fontFamily: "var(--f-ui)",
+    lineHeight: 1.5,
+  };
 
   return (
     <div
@@ -1092,7 +1194,7 @@ function PromptCard({
               color: "var(--bone)",
             }}
           >
-            {tab === "video" ? `VIDEO · ${p.videoModel}` : `IMAGE · ${item.model ?? "NanoBanana"}`}
+            {tab === "video" ? `VIDEO · ${videoModelLabel}` : `IMAGE · ${item.model ?? "NanoBanana"}`}
           </div>
           {tab === "video" && (
             <div
@@ -1149,7 +1251,13 @@ function PromptCard({
         {tab === "image" ? (
           <>
             <Field label="Prompt">
-              <Textarea rows={6} value={p.image} />
+              <textarea
+                rows={6}
+                value={imgText}
+                onChange={(e) => setImgText(e.target.value)}
+                onBlur={() => savePrompt("image", imgText)}
+                style={taStyle}
+              />
             </Field>
             <Field label="Negatives">
               <Input value="— plastic, studio lighting, hand model" />
@@ -1227,8 +1335,38 @@ function PromptCard({
         ) : (
           <>
             <Field label="Motion prompt">
-              <Textarea rows={5} value={p.video} />
+              <textarea
+                rows={5}
+                value={vidText}
+                onChange={(e) => setVidText(e.target.value)}
+                onBlur={() => savePrompt("video", vidText)}
+                style={taStyle}
+              />
             </Field>
+            <div style={{ marginTop: -6, marginBottom: 12, display: "flex", alignItems: "center" }}>
+              <Btn
+                size="sm"
+                variant="ghost"
+                icon={<I.ArrowRight size={12} />}
+                onClick={handleUseInShot}
+                disabled={!!busy || !projectId}
+              >
+                {busy === "useInShot" ? "Adding…" : "Use in shot →"}
+              </Btn>
+              {toast && (
+                <span
+                  style={{
+                    marginLeft: 8,
+                    fontSize: 11,
+                    color: "var(--lime)",
+                    fontFamily: "var(--f-mono)",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  {toast}
+                </span>
+              )}
+            </div>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Duration">
                 <div
@@ -1263,7 +1401,7 @@ function PromptCard({
                     color: "var(--bone)",
                   }}
                 >
-                  <span>{p.videoModel}</span>
+                  <span>{videoModelLabel}</span>
                   <I.ChevDown size={12} />
                 </div>
               </Field>
@@ -1309,11 +1447,39 @@ function PromptCard({
         }}
       >
         <div style={{ fontSize: 11, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>
-          <span style={{ color: "var(--lime)" }}>~4s</span> · $0.08
+          {err ? (
+            <span style={{ color: "var(--coral)" }}>{err}</span>
+          ) : (
+            <>
+              <span style={{ color: "var(--lime)" }}>~4s</span> · $0.08
+            </>
+          )}
         </div>
         <div style={{ flex: 1 }} />
-        <Btn size="sm" variant="ghost" icon={<I.Refresh size={12} />}>Variations</Btn>
-        <Btn size="sm" variant="primary" icon={<I.Sparkles size={12} />}>Regenerate</Btn>
+        <Btn
+          size="sm"
+          variant="ghost"
+          icon={<I.Layers size={12} />}
+          onClick={() => handleGenerate(3, "variants")}
+          disabled={!!busy || !projectId}
+        >
+          {busy === "variants" ? "Generating…" : "Variations"}
+        </Btn>
+        <Btn
+          size="sm"
+          variant="primary"
+          icon={
+            busy === "regen" ? (
+              <I.Loader size={12} style={{ animation: "spin 1.2s linear infinite" }} />
+            ) : (
+              <I.Sparkles size={12} />
+            )
+          }
+          onClick={() => handleGenerate(1, "regen")}
+          disabled={!!busy || !projectId}
+        >
+          {busy === "regen" ? "Thinking…" : "Regenerate"}
+        </Btn>
       </div>
     </div>
   );

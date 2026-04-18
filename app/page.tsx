@@ -238,7 +238,11 @@ export default function App() {
             />
           )}
           {effectiveScreen === "storyboard" && project && (
-            <ScreenStoryboard initialShot={focusShot} projectId={activeProjectId} />
+            <ScreenStoryboard
+              initialShot={focusShot}
+              projectId={activeProjectId}
+              onNext={() => setScreen("export")}
+            />
           )}
           {effectiveScreen === "export" && project && <ScreenExport projectId={activeProjectId} />}
           <ProjectSettings

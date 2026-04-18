@@ -10,16 +10,27 @@ import {
 } from "@/lib/data";
 import { createClient } from "@/lib/supabase-client";
 import {
+  createConcept,
   listConcepts,
   setSelectedConcept,
   type DBConceptUI,
 } from "@/lib/queries-concepts";
 import { listBoardItems, type DBBoardItemUI } from "@/lib/queries-board";
+import { updateProject } from "@/lib/queries";
+import { generateConcepts } from "@/lib/ai-queries";
+import type { Brief } from "@/lib/prompts";
 
 interface Props {
   onNext: () => void;
   projectId?: string | null;
 }
+
+const DEFAULT_BRIEF = {
+  goal: "Launch of AURA's signature serum. Reposition as a quiet luxury ritual, not skincare.",
+  audience: "Women, 28–44, premium beauty, urban",
+  placements: ["Reels", "TikTok", "YouTube pre-roll", "OOH"],
+  mustInclude: ["Logo visible 2+ seconds", "Product close-up", "End card with CTA"],
+};
 
 export default function ScreenConcept({ onNext, projectId }: Props) {
   const supabase = useMemo(() => createClient(), []);
@@ -27,6 +38,19 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
   const [refs, setRefs] = useState<DBBoardItemUI[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [savingNext, setSavingNext] = useState(false);
+
+  const [goal, setGoal] = useState(DEFAULT_BRIEF.goal);
+  const [audience, setAudience] = useState(DEFAULT_BRIEF.audience);
+  const [placementsText, setPlacementsText] = useState(DEFAULT_BRIEF.placements.join(", "));
+  const [mustIncludeText, setMustIncludeText] = useState(DEFAULT_BRIEF.mustInclude.join("\n"));
+
+  const [writeOpen, setWriteOpen] = useState(false);
+  const [newTitle, setNewTitle] = useState("");
+  const [newHook, setNewHook] = useState("");
+  const [savingNew, setSavingNew] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -48,8 +72,8 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
         setRefs(items.filter((i) => i.isRef));
         const pre = rows.find((c) => c.isSelected) ?? rows[0];
         setSelected(pre?.dbId ?? null);
-      } catch (err) {
-        console.error("load concepts", err);
+      } catch (error) {
+        console.error("load concepts", error);
         if (!active) return;
         setConcepts([]);
       } finally {
@@ -62,6 +86,14 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
     };
   }, [supabase, projectId]);
 
+  async function reloadConcepts() {
+    if (!projectId) return;
+    const rows = await listConcepts(supabase, projectId);
+    setConcepts(rows);
+    const pre = rows.find((c) => c.isSelected) ?? rows[0];
+    setSelected(pre?.dbId ?? null);
+  }
+
   async function handleSelect(conceptId: string) {
     setSelected(conceptId);
     if (!projectId) return;
@@ -72,13 +104,96 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
           ? prev.map((c) => ({ ...c, isSelected: c.dbId === conceptId }))
           : prev
       );
-    } catch (err) {
-      console.error("setSelectedConcept", err);
+    } catch (error) {
+      console.error("setSelectedConcept", error);
+      setErr(error instanceof Error ? error.message : "Failed to select concept");
     }
   }
 
-  // When no project is open (e.g. rendered from /login), fall back to the
-  // seed array — preserves visuals for static preview.
+  function buildBrief(): Brief {
+    return {
+      projectName: "FrameForge Project",
+      client: "",
+      goal,
+      audience,
+      placements: placementsText
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      mustInclude: mustIncludeText
+        .split("\n")
+        .map((s) => s.trim())
+        .filter(Boolean),
+      aspect: "9:16",
+    };
+  }
+
+  async function handleRegenerate() {
+    if (!projectId || regenerating) return;
+    setRegenerating(true);
+    setErr(null);
+    try {
+      await generateConcepts(projectId, buildBrief());
+      await reloadConcepts();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Failed to regenerate concepts");
+    } finally {
+      setRegenerating(false);
+    }
+  }
+
+  async function handleUseThis() {
+    if (!projectId || savingNext) return;
+    const target = (concepts || []).find((c) => c.dbId === selected);
+    if (!target) {
+      onNext();
+      return;
+    }
+    setSavingNext(true);
+    setErr(null);
+    try {
+      await updateProject(supabase, projectId, {
+        concept_title: target.title,
+        concept_hook: target.hook ?? "",
+        concept_palette: target.palette ?? [],
+      });
+      onNext();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Failed to save concept");
+    } finally {
+      setSavingNext(false);
+    }
+  }
+
+  async function handleSaveNewConcept() {
+    if (!projectId || savingNew) return;
+    if (!newTitle.trim()) {
+      setErr("Title is required");
+      return;
+    }
+    setSavingNew(true);
+    setErr(null);
+    try {
+      await createConcept(supabase, projectId, {
+        title: newTitle.trim(),
+        hook: newHook.trim(),
+        vibe: [],
+        palette: ["#d4ff3a", "#1a1a1d", "#f7f4ee"],
+        length_seconds: 10,
+        shot_count: 4,
+        is_ai_generated: false,
+      });
+      setNewTitle("");
+      setNewHook("");
+      setWriteOpen(false);
+      await reloadConcepts();
+    } catch (error) {
+      setErr(error instanceof Error ? error.message : "Failed to create concept");
+    } finally {
+      setSavingNew(false);
+    }
+  }
+
   const viewConcepts: DBConceptUI[] | Concept[] =
     concepts && concepts.length > 0
       ? concepts
@@ -95,7 +210,6 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
 
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
-      {/* Left — brief */}
       <div
         style={{
           width: 340,
@@ -129,36 +243,16 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
           AURA · Morning Campaign
         </div>
         <Field label="Goal">
-          <Textarea rows={3} value="Launch of AURA's signature serum. Reposition as a quiet luxury ritual, not skincare." />
+          <Textarea rows={3} value={goal} onChange={setGoal} />
         </Field>
         <Field label="Audience">
-          <Input value="Women, 28–44, premium beauty, urban" />
+          <Input value={audience} onChange={setAudience} />
         </Field>
-        <Field label="Placements">
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            <Chip color="lime">Reels</Chip>
-            <Chip color="lime">TikTok</Chip>
-            <Chip>YouTube pre-roll</Chip>
-            <Chip>OOH</Chip>
-          </div>
+        <Field label="Placements" hint="Comma-separated">
+          <Input value={placementsText} onChange={setPlacementsText} />
         </Field>
-        <Field label="Must include">
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            {["Logo visible 2+ seconds", "Product close-up", "End card with CTA"].map((t) => (
-              <div
-                key={t}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 6,
-                  fontSize: 12,
-                  color: "var(--ash-gray)",
-                }}
-              >
-                <I.Check size={12} style={{ color: "var(--lime)" }} /> {t}
-              </div>
-            ))}
-          </div>
+        <Field label="Must include" hint="One per line">
+          <Textarea rows={3} value={mustIncludeText} onChange={setMustIncludeText} />
         </Field>
         <div style={{ height: 1, background: "var(--iron)", margin: "18px 0" }} />
         <div
@@ -187,7 +281,6 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
         </div>
       </div>
 
-      {/* Right — concepts */}
       <div style={{ flex: 1, overflow: "auto", padding: 28 }}>
         <div style={{ display: "flex", alignItems: "center", marginBottom: 4 }}>
           <div
@@ -203,20 +296,44 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
         </div>
         <div style={{ display: "flex", alignItems: "flex-end", marginBottom: 18 }}>
           <div style={{ fontSize: 24, fontWeight: 600, color: "var(--bone)", letterSpacing: -0.4 }}>
-            Five concepts from your brief
+            {regenerating ? "Thinking…" : "Five concepts from your brief"}
           </div>
           <div style={{ flex: 1 }} />
-          <Btn size="sm" icon={<I.Refresh size={14} />}>Regenerate</Btn>
+          <Btn
+            size="sm"
+            icon={<I.Refresh size={14} />}
+            onClick={handleRegenerate}
+            disabled={regenerating || !projectId}
+          >
+            {regenerating ? "Thinking…" : "Regenerate"}
+          </Btn>
           <Btn
             size="sm"
             variant="primary"
             icon={<I.ArrowRight size={14} />}
-            onClick={onNext}
+            onClick={handleUseThis}
+            disabled={savingNext || !selected}
             style={{ marginLeft: 8 }}
           >
-            Use this concept
+            {savingNext ? "Saving…" : "Use this concept"}
           </Btn>
         </div>
+
+        {err && (
+          <div
+            style={{
+              marginBottom: 12,
+              padding: "10px 12px",
+              border: "1px solid rgba(255,90,95,0.3)",
+              background: "rgba(255,90,95,0.08)",
+              color: "var(--coral)",
+              borderRadius: 6,
+              fontSize: 12,
+            }}
+          >
+            {err}
+          </div>
+        )}
 
         {loading && projectId ? (
           <ConceptSkeletons />
@@ -234,30 +351,92 @@ export default function ScreenConcept({ onNext, projectId }: Props) {
                 />
               );
             })}
-            <div
-              style={{
-                padding: 20,
-                border: "1px dashed var(--iron-2)",
-                borderRadius: 12,
-                display: "flex",
-                flexDirection: "column",
-                alignItems: "center",
-                justifyContent: "center",
-                gap: 8,
-                minHeight: 260,
-                cursor: "pointer",
-              }}
-            >
-              <div style={{ color: "var(--lime)" }}>
-                <I.Edit size={22} />
+            {writeOpen ? (
+              <div
+                style={{
+                  padding: 18,
+                  border: "1px dashed rgba(212,255,58,0.5)",
+                  borderRadius: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  gap: 10,
+                  minHeight: 260,
+                  background: "var(--onyx)",
+                }}
+              >
+                <div
+                  style={{
+                    fontSize: 10,
+                    fontFamily: "var(--f-mono)",
+                    letterSpacing: 1.5,
+                    color: "var(--lime)",
+                  }}
+                >
+                  NEW CONCEPT
+                </div>
+                <Field label="Title">
+                  <Input value={newTitle} onChange={setNewTitle} placeholder="e.g. Weightless Ritual" />
+                </Field>
+                <Field label="Hook">
+                  <Textarea
+                    rows={3}
+                    value={newHook}
+                    onChange={setNewHook}
+                    placeholder="1–2 sentence visual spine"
+                  />
+                </Field>
+                <div style={{ flex: 1 }} />
+                <div style={{ display: "flex", gap: 8 }}>
+                  <Btn
+                    size="sm"
+                    onClick={() => {
+                      setWriteOpen(false);
+                      setNewTitle("");
+                      setNewHook("");
+                    }}
+                    disabled={savingNew}
+                  >
+                    Cancel
+                  </Btn>
+                  <div style={{ flex: 1 }} />
+                  <Btn
+                    size="sm"
+                    variant="primary"
+                    onClick={handleSaveNewConcept}
+                    disabled={savingNew || !newTitle.trim()}
+                  >
+                    {savingNew ? "Saving…" : "Save"}
+                  </Btn>
+                </div>
               </div>
-              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bone)" }}>Write your own</div>
-              <div style={{ fontSize: 11, color: "var(--slate-2)", textAlign: "center" }}>
-                Paste a storyboard, moodboard,
-                <br />
-                or reference link.
+            ) : (
+              <div
+                onClick={() => projectId && setWriteOpen(true)}
+                style={{
+                  padding: 20,
+                  border: "1px dashed var(--iron-2)",
+                  borderRadius: 12,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 8,
+                  minHeight: 260,
+                  cursor: projectId ? "pointer" : "default",
+                  opacity: projectId ? 1 : 0.5,
+                }}
+              >
+                <div style={{ color: "var(--lime)" }}>
+                  <I.Edit size={22} />
+                </div>
+                <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bone)" }}>Write your own</div>
+                <div style={{ fontSize: 11, color: "var(--slate-2)", textAlign: "center" }}>
+                  Add a custom concept
+                  <br />
+                  with your own title + hook.
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>

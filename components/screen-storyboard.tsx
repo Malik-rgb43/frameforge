@@ -5,10 +5,8 @@ import {
   Btn,
   Chip,
   Field,
-  Input,
   SlideOver,
   StatusDot,
-  Textarea,
   iconBtnStyle,
 } from "./ui";
 import {
@@ -19,15 +17,27 @@ import {
   type Tone,
 } from "@/lib/data";
 import { createClient } from "@/lib/supabase-client";
-import { listShots, type DBShotUI } from "@/lib/queries-shots";
+import {
+  createShot,
+  deleteShot,
+  listShots,
+  reorderShots,
+  updateShot,
+  type DBShotUI,
+} from "@/lib/queries-shots";
 import { listBoardItems, type DBBoardItemUI } from "@/lib/queries-board";
+import { generateVideoPrompt } from "@/lib/ai-queries";
+import { getProject } from "@/lib/queries";
 
 interface Props {
   initialShot: number | null;
   projectId?: string | null;
+  onNext?: () => void;
 }
 
-export default function ScreenStoryboard({ initialShot, projectId }: Props) {
+const MODEL_OPTIONS = ["seedance-2", "kling-3"];
+
+export default function ScreenStoryboard({ initialShot, projectId, onNext }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [shots, setShots] = useState<DBShotUI[]>([]);
   const [items, setItems] = useState<DBBoardItemUI[]>([]);
@@ -35,12 +45,15 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
   const [sel, setSel] = useState(initialShot || 2);
   const [detailOpen, setDetailOpen] = useState(false);
   const [scrub] = useState(3.2);
+  const [conceptTitle, setConceptTitle] = useState<string>("Untitled");
+  const [addingShot, setAddingShot] = useState(false);
+  const [panelBusy, setPanelBusy] = useState(false);
+  const [panelErr, setPanelErr] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
     async function load() {
       if (!projectId) {
-        // Static fallback for preview/unauth'd paths.
         if (!active) return;
         const staticShots: DBShotUI[] = SEED_SHOTS.map((s, i) => ({
           ...s,
@@ -56,13 +69,15 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
       }
       setLoading(true);
       try {
-        const [s, it] = await Promise.all([
+        const [s, it, proj] = await Promise.all([
           listShots(supabase, projectId),
           listBoardItems(supabase, projectId),
+          getProject(supabase, projectId),
         ]);
         if (!active) return;
         setShots(s);
         setItems(it);
+        if (proj?.concept_title) setConceptTitle(proj.concept_title);
       } catch (err) {
         console.error("load storyboard", err);
       } finally {
@@ -82,10 +97,92 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
     }
   }, [initialShot]);
 
+  async function refreshShots() {
+    if (!projectId) return undefined;
+    const next = await listShots(supabase, projectId);
+    setShots(next);
+    return next;
+  }
+
+  async function handleShotPatch(id: string, patch: Parameters<typeof updateShot>[2]) {
+    if (!projectId) return;
+    try {
+      const updated = await updateShot(supabase, id, patch);
+      setShots((prev) =>
+        prev.map((s) => (s.dbId === id ? { ...s, ...updated } : s))
+      );
+      setPanelErr(null);
+    } catch (err) {
+      console.error("updateShot", err);
+      setPanelErr(err instanceof Error ? err.message : "Save failed");
+    }
+  }
+
+  async function handleRegeneratePrompt(shotId: string) {
+    if (!projectId || panelBusy) return;
+    setPanelBusy(true);
+    setPanelErr(null);
+    try {
+      const res = await generateVideoPrompt(shotId, conceptTitle);
+      setShots((prev) =>
+        prev.map((s) =>
+          s.dbId === shotId ? { ...s, prompt: res.videoPrompt } : s
+        )
+      );
+    } catch (err) {
+      setPanelErr(err instanceof Error ? err.message : "Regenerate failed");
+    } finally {
+      setPanelBusy(false);
+    }
+  }
+
+  async function handleDeleteShot(shotId: string) {
+    if (!projectId || panelBusy) return;
+    setPanelBusy(true);
+    setPanelErr(null);
+    try {
+      await deleteShot(supabase, shotId);
+      const next = await refreshShots();
+      if (next) {
+        const orders = next.map((s, i) => ({ id: s.dbId, order_index: i }));
+        await reorderShots(supabase, orders);
+        await refreshShots();
+      }
+      setDetailOpen(false);
+      setSel(1);
+    } catch (err) {
+      setPanelErr(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setPanelBusy(false);
+    }
+  }
+
+  async function handleAddShot() {
+    if (!projectId || addingShot) return;
+    setAddingShot(true);
+    try {
+      const nextOrder = shots.length;
+      await createShot(supabase, projectId, {
+        order_index: nextOrder,
+        title: "New shot",
+        duration: 2.5,
+        sequence_name: "SEQ 1",
+        aspect: "9:16",
+        model: "seedance-2",
+        motion: "Static",
+        status: "ready",
+      });
+      await refreshShots();
+    } catch (err) {
+      console.error("createShot", err);
+    } finally {
+      setAddingShot(false);
+    }
+  }
+
   const totalDur = shots.reduce((s, sh) => s + sh.duration, 0);
 
   function refOf(shot: DBShotUI): { kind: Kind; tone: Tone; id: string } {
-    // Match by DB id first (real data), then by legacy seed id.
     const match =
       items.find((i) => i.id === shot.refItemId) ||
       items.find((i) => i.id === shot.refImageId);
@@ -122,13 +219,24 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
         style={{
           flex: 1,
           display: "flex",
+          flexDirection: "column",
           alignItems: "center",
           justifyContent: "center",
+          gap: 12,
           color: "var(--slate-2)",
           fontSize: 12,
         }}
       >
-        No shots yet.
+        <div>No shots yet.</div>
+        <Btn
+          size="sm"
+          variant="primary"
+          icon={<I.Plus size={12} />}
+          onClick={handleAddShot}
+          disabled={addingShot || !projectId}
+        >
+          {addingShot ? "Adding…" : "Add shot"}
+        </Btn>
       </div>
     );
   }
@@ -138,7 +246,6 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
-      {/* Top header */}
       <div style={{ padding: "20px 28px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", letterSpacing: 1.5, color: "var(--slate-2)" }}>
@@ -154,16 +261,27 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
               whiteSpace: "nowrap",
             }}
           >
-            Weightless Ritual
+            {conceptTitle}
           </div>
         </div>
         <div style={{ flex: 1 }} />
-        <Btn size="sm" icon={<I.Sparkles size={14} />}>Generate VO</Btn>
-        <Btn size="sm" icon={<I.Music size={14} />}>Add soundtrack</Btn>
-        <Btn size="sm" variant="primary" icon={<I.ArrowRight size={14} />}>Render preview</Btn>
+        <Btn size="sm" icon={<I.Sparkles size={14} />} disabled>
+          Generate VO
+        </Btn>
+        <Btn size="sm" icon={<I.Music size={14} />} disabled>
+          Add soundtrack
+        </Btn>
+        <Btn
+          size="sm"
+          variant="primary"
+          icon={<I.ArrowRight size={14} />}
+          onClick={() => onNext && onNext()}
+          disabled={!onNext}
+        >
+          Render preview
+        </Btn>
       </div>
 
-      {/* Preview stage */}
       <div style={{ padding: "0 28px", display: "flex", gap: 14, marginBottom: 10 }}>
         <div
           style={{
@@ -325,15 +443,36 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
             </div>
           )}
           <div style={{ marginTop: 12, display: "flex", gap: 8 }}>
-            <Btn size="sm" icon={<I.Refresh size={12} />}>Re-roll</Btn>
-            <Btn size="sm" icon={<I.Layers size={12} />}>Variations</Btn>
-            <Btn size="sm" icon={<I.Sliders size={12} />}>Adjust motion</Btn>
-            <Btn size="sm" variant="danger" icon={<I.Trash size={12} />}>Remove</Btn>
+            <Btn
+              size="sm"
+              icon={<I.Refresh size={12} />}
+              onClick={() => handleRegeneratePrompt(selected.dbId)}
+              disabled={panelBusy || !projectId}
+            >
+              {panelBusy ? "…" : "Re-roll"}
+            </Btn>
+            <Btn size="sm" icon={<I.Layers size={12} />} disabled>
+              Variations
+            </Btn>
+            <Btn size="sm" icon={<I.Sliders size={12} />} disabled>
+              Adjust motion
+            </Btn>
+            <Btn
+              size="sm"
+              variant="danger"
+              icon={<I.Trash size={12} />}
+              onClick={() => handleDeleteShot(selected.dbId)}
+              disabled={panelBusy || !projectId}
+            >
+              Remove
+            </Btn>
           </div>
+          {panelErr && (
+            <div style={{ marginTop: 10, fontSize: 11, color: "var(--coral)" }}>{panelErr}</div>
+          )}
         </div>
       </div>
 
-      {/* Timeline */}
       <div
         style={{
           borderTop: "1px solid var(--iron)",
@@ -360,7 +499,6 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-          {/* video track */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 60, fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>VIDEO</div>
             <div style={{ flex: 1, display: "flex", gap: 2, position: "relative" }}>
@@ -456,7 +594,6 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
                   </div>
                 );
               })}
-              {/* playhead */}
               <div
                 style={{
                   position: "absolute",
@@ -491,7 +628,6 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
             </div>
           </div>
 
-          {/* audio track */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 60, fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>VO</div>
             <div style={{ flex: 1, display: "flex", gap: 2 }}>
@@ -525,7 +661,6 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
             </div>
           </div>
 
-          {/* music track */}
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 60, fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>MUSIC</div>
             <div
@@ -592,7 +727,15 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
           <Chip>
             <I.Sparkles size={10} /> 1 rendering
           </Chip>
-          <Btn size="sm" variant="ghost" icon={<I.Plus size={12} />}>Add shot</Btn>
+          <Btn
+            size="sm"
+            variant="ghost"
+            icon={<I.Plus size={12} />}
+            onClick={handleAddShot}
+            disabled={addingShot || !projectId}
+          >
+            {addingShot ? "Adding…" : "Add shot"}
+          </Btn>
         </div>
       </div>
 
@@ -602,7 +745,17 @@ export default function ScreenStoryboard({ initialShot, projectId }: Props) {
         title={`Shot ${String(selected.n).padStart(2, "0")} — ${selected.title}`}
         width={460}
       >
-        <ShotDetailPanel shot={selected} refKind={selectedRef.kind} refTone={selectedRef.tone} refId={selectedRef.id} />
+        <ShotDetailPanel
+          shot={selected}
+          refKind={selectedRef.kind}
+          refTone={selectedRef.tone}
+          refId={selectedRef.id}
+          busy={panelBusy}
+          err={panelErr}
+          onSave={(patch) => handleShotPatch(selected.dbId, patch)}
+          onRegenerate={() => handleRegeneratePrompt(selected.dbId)}
+          onDelete={() => handleDeleteShot(selected.dbId)}
+        />
       </SlideOver>
     </div>
   );
@@ -613,12 +766,82 @@ function ShotDetailPanel({
   refKind,
   refTone,
   refId,
+  busy,
+  err,
+  onSave,
+  onRegenerate,
+  onDelete,
 }: {
   shot: DBShotUI;
   refKind: Kind;
   refTone: Tone;
   refId: string;
+  busy: boolean;
+  err: string | null;
+  onSave: (patch: { title?: string; video_prompt?: string; duration?: number; model?: string; voiceover?: string | null }) => void | Promise<void>;
+  onRegenerate: () => void | Promise<void>;
+  onDelete: () => void | Promise<void>;
 }) {
+  const [title, setTitle] = useState(shot.title);
+  const [prompt, setPrompt] = useState(shot.prompt);
+  const [durationText, setDurationText] = useState(String(shot.duration));
+  const [model, setModel] = useState(shot.model);
+  const [vo, setVo] = useState(shot.vo ?? "");
+  const [modelOpen, setModelOpen] = useState(false);
+
+  useEffect(() => {
+    setTitle(shot.title);
+    setPrompt(shot.prompt);
+    setDurationText(String(shot.duration));
+    setModel(shot.model);
+    setVo(shot.vo ?? "");
+  }, [shot.dbId, shot.title, shot.prompt, shot.duration, shot.model, shot.vo]);
+
+  function commitTitle() {
+    if (title !== shot.title) onSave({ title });
+  }
+  function commitPrompt() {
+    if (prompt !== shot.prompt) onSave({ video_prompt: prompt });
+  }
+  function commitDuration() {
+    const n = parseFloat(durationText.replace(/[^0-9.]/g, ""));
+    if (Number.isFinite(n) && n > 0 && n !== shot.duration) onSave({ duration: n });
+  }
+  function commitVo() {
+    const next = vo.trim() === "" ? null : vo;
+    if (next !== shot.vo) onSave({ voiceover: next });
+  }
+  function pickModel(m: string) {
+    setModel(m);
+    setModelOpen(false);
+    if (m !== shot.model) onSave({ model: m });
+  }
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    height: 34,
+    padding: "0 12px",
+    background: "var(--ash)",
+    border: "1px solid var(--iron)",
+    borderRadius: 6,
+    color: "var(--bone)",
+    fontSize: 13,
+    outline: "none",
+  };
+  const textareaStyle: React.CSSProperties = {
+    width: "100%",
+    padding: 10,
+    background: "var(--ash)",
+    border: "1px solid var(--iron)",
+    borderRadius: 6,
+    color: "var(--bone)",
+    fontSize: 13,
+    outline: "none",
+    resize: "none",
+    fontFamily: "var(--f-ui)",
+    lineHeight: 1.5,
+  };
+
   return (
     <div style={{ padding: 18 }}>
       <div
@@ -647,45 +870,140 @@ function ShotDetailPanel({
       </div>
 
       <Field label="Title">
-        <Input value={shot.title} />
+        <input
+          value={title}
+          onChange={(e) => setTitle(e.target.value)}
+          onBlur={commitTitle}
+          style={inputStyle}
+        />
       </Field>
       <Field label="Prompt">
-        <Textarea rows={6} value={shot.prompt} />
+        <textarea
+          value={prompt}
+          onChange={(e) => setPrompt(e.target.value)}
+          onBlur={commitPrompt}
+          rows={6}
+          style={textareaStyle}
+        />
       </Field>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
         <Field label="Model">
-          <div
-            style={{
-              height: 34,
-              padding: "0 10px",
-              background: "var(--ash)",
-              border: "1px solid var(--iron)",
-              borderRadius: 6,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "space-between",
-              fontSize: 12,
-              color: "var(--bone)",
-            }}
-          >
-            {shot.model}
-            <I.ChevDown size={12} />
+          <div style={{ position: "relative" }}>
+            <div
+              onClick={() => setModelOpen((o) => !o)}
+              style={{
+                height: 34,
+                padding: "0 10px",
+                background: "var(--ash)",
+                border: "1px solid var(--iron)",
+                borderRadius: 6,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                fontSize: 12,
+                color: "var(--bone)",
+                cursor: "pointer",
+              }}
+            >
+              {model}
+              <I.ChevDown size={12} />
+            </div>
+            {modelOpen && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: 38,
+                  left: 0,
+                  right: 0,
+                  background: "var(--onyx)",
+                  border: "1px solid var(--iron-2)",
+                  borderRadius: 6,
+                  zIndex: 5,
+                  overflow: "hidden",
+                }}
+              >
+                {MODEL_OPTIONS.map((m) => (
+                  <div
+                    key={m}
+                    onClick={() => pickModel(m)}
+                    style={{
+                      padding: "8px 10px",
+                      fontSize: 12,
+                      color: m === model ? "var(--lime)" : "var(--bone)",
+                      cursor: "pointer",
+                    }}
+                  >
+                    {m}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </Field>
         <Field label="Duration">
-          <Input value={`${shot.duration}s`} />
+          <input
+            value={durationText}
+            onChange={(e) => setDurationText(e.target.value)}
+            onBlur={commitDuration}
+            placeholder="2.5"
+            style={inputStyle}
+          />
         </Field>
       </div>
       <Field label="Voice-over" hint="Optional. Auto-synced to shot length.">
-        <Textarea rows={2} value={shot.vo || ""} placeholder="No VO on this shot" />
+        <textarea
+          value={vo}
+          onChange={(e) => setVo(e.target.value)}
+          onBlur={commitVo}
+          rows={2}
+          placeholder="No VO on this shot"
+          style={textareaStyle}
+        />
       </Field>
+
+      {err && (
+        <div
+          style={{
+            marginTop: 8,
+            padding: "8px 10px",
+            border: "1px solid rgba(255,90,95,0.3)",
+            background: "rgba(255,90,95,0.08)",
+            color: "var(--coral)",
+            borderRadius: 6,
+            fontSize: 12,
+          }}
+        >
+          {err}
+        </div>
+      )}
 
       <div style={{ height: 1, background: "var(--iron)", margin: "16px 0" }} />
       <div style={{ display: "flex", gap: 8 }}>
-        <Btn variant="default" icon={<I.Refresh size={14} />}>Re-roll</Btn>
-        <Btn variant="primary" icon={<I.Sparkles size={14} />}>Regenerate</Btn>
+        <Btn
+          variant="default"
+          icon={<I.Refresh size={14} />}
+          onClick={onRegenerate}
+          disabled={busy}
+        >
+          Re-roll
+        </Btn>
+        <Btn
+          variant="primary"
+          icon={<I.Sparkles size={14} />}
+          onClick={onRegenerate}
+          disabled={busy}
+        >
+          {busy ? "Thinking…" : "Regenerate"}
+        </Btn>
         <div style={{ flex: 1 }} />
-        <Btn variant="danger" icon={<I.Trash size={14} />}>{null}</Btn>
+        <Btn
+          variant="danger"
+          icon={<I.Trash size={14} />}
+          onClick={onDelete}
+          disabled={busy}
+        >
+          {null}
+        </Btn>
       </div>
     </div>
   );
