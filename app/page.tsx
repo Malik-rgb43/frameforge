@@ -134,8 +134,14 @@ export default function App() {
       setNewProjectOpen(false);
       setScreen("concept");
     } catch (err) {
-      console.error(err);
-      alert(err instanceof Error ? err.message : "Failed to create project");
+      console.error("createProject failed", err);
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err && "message" in err
+            ? String((err as { message: unknown }).message)
+            : JSON.stringify(err);
+      alert(`Failed to create project: ${msg}`);
     } finally {
       setCreating(false);
     }

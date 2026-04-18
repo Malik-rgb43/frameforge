@@ -64,6 +64,9 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
   const [uploadOpen, setUploadOpen] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [aiError, setAiError] = useState<string | null>(null);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [panning, setPanning] = useState(false);
+  const [droppingFiles, setDroppingFiles] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -449,14 +452,78 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
         {/* Canvas body */}
         <div
           ref={canvasRef}
+          onContextMenu={(e) => e.preventDefault()}
+          onPointerDown={(e) => {
+            // Right-click or middle-click on empty canvas → pan
+            if (e.button !== 2 && e.button !== 1) return;
+            const target = e.target as HTMLElement;
+            // Only pan when starting from canvas bg, not an item
+            if (target.closest("[data-board-item-id]")) return;
+            e.preventDefault();
+            setPanning(true);
+            const startX = e.clientX;
+            const startY = e.clientY;
+            const startPan = { ...pan };
+            const onMove = (ev: PointerEvent) => {
+              setPan({ x: startPan.x + (ev.clientX - startX), y: startPan.y + (ev.clientY - startY) });
+            };
+            const onUp = () => {
+              setPanning(false);
+              window.removeEventListener("pointermove", onMove);
+              window.removeEventListener("pointerup", onUp);
+              window.removeEventListener("pointercancel", onUp);
+            };
+            window.addEventListener("pointermove", onMove);
+            window.addEventListener("pointerup", onUp);
+            window.addEventListener("pointercancel", onUp);
+          }}
+          onDragOver={(e) => {
+            if (!projectId) return;
+            e.preventDefault();
+            setDroppingFiles(true);
+          }}
+          onDragLeave={(e) => {
+            if (e.currentTarget === e.target) setDroppingFiles(false);
+          }}
+          onDrop={async (e) => {
+            e.preventDefault();
+            setDroppingFiles(false);
+            if (!projectId) return;
+            const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith("image/"));
+            if (files.length === 0) return;
+            const rect = canvasRef.current?.getBoundingClientRect();
+            const baseX = rect ? e.clientX - rect.left - pan.x - 100 : 80;
+            const baseY = rect ? e.clientY - rect.top - pan.y - 130 : 80;
+            const { uploadProductShot } = await import("@/lib/upload");
+            for (let i = 0; i < files.length; i++) {
+              const file = files[i];
+              try {
+                const res = await uploadProductShot(file, projectId);
+                await createBoardItemFromUpload(supabase, projectId, {
+                  filename: res.filename,
+                  imageUrl: res.publicUrl,
+                  storagePath: res.storagePath,
+                  x: baseX + i * 40,
+                  y: baseY + i * 40,
+                });
+              } catch (err) {
+                console.error("drop upload", err);
+              }
+            }
+            await refetchItems();
+          }}
           style={{
             position: "absolute",
             inset: 0,
             backgroundImage: "radial-gradient(rgba(255,255,255,0.04) 1px, transparent 1px)",
             backgroundSize: "24px 24px",
-            backgroundPosition: "0 0",
+            backgroundPosition: `${pan.x}px ${pan.y}px`,
+            cursor: panning ? "grabbing" : "default",
+            outline: droppingFiles ? "2px dashed var(--lime)" : "none",
+            outlineOffset: -8,
           }}
         >
+          <div style={{ position: "absolute", inset: 0, transform: `translate(${pan.x}px, ${pan.y}px)` }}>
           <svg style={{ position: "absolute", inset: 0, pointerEvents: "none" }}>
             <defs>
               <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="8" markerHeight="8" orient="auto">
@@ -584,6 +651,7 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
               />
             );
           })}
+          </div>
         </div>
 
         {/* Shift-drag to link hint — only while hovering an item and not already dragging */}
