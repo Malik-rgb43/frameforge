@@ -12,6 +12,8 @@ import {
 import { createClient } from "@/lib/supabase-client";
 import { listShots, type DBShotUI } from "@/lib/queries-shots";
 import { listBoardItems, type DBBoardItemUI } from "@/lib/queries-board";
+import { getProject, type DBProject } from "@/lib/queries";
+import { exportPack } from "@/lib/ai-queries";
 
 type Format = "mp4-h264" | "mp4-h265" | "prores" | "webm";
 type Res = "720p" | "1080p" | "4k";
@@ -24,9 +26,13 @@ export default function ScreenExport({ projectId }: Props) {
   const supabase = useMemo(() => createClient(), []);
   const [shots, setShots] = useState<DBShotUI[]>([]);
   const [items, setItems] = useState<DBBoardItemUI[]>([]);
+  const [project, setProject] = useState<DBProject | null>(null);
   const [loading, setLoading] = useState(true);
   const [format, setFormat] = useState<Format>("mp4-h264");
   const [res, setRes] = useState<Res>("1080p");
+  const [packing, setPacking] = useState(false);
+  const [packError, setPackError] = useState<string | null>(null);
+  const [shareCopied, setShareCopied] = useState(false);
 
   useEffect(() => {
     let active = true;
@@ -41,18 +47,21 @@ export default function ScreenExport({ projectId }: Props) {
         }));
         setShots(staticShots);
         setItems(SEED_PRODUCT_IMAGES.map((s) => ({ ...s })));
+        setProject(null);
         setLoading(false);
         return;
       }
       setLoading(true);
       try {
-        const [s, it] = await Promise.all([
+        const [s, it, pr] = await Promise.all([
           listShots(supabase, projectId),
           listBoardItems(supabase, projectId),
+          getProject(supabase, projectId),
         ]);
         if (!active) return;
         setShots(s);
         setItems(it);
+        setProject(pr);
       } catch (err) {
         console.error("load export", err);
       } finally {
@@ -65,7 +74,12 @@ export default function ScreenExport({ projectId }: Props) {
     };
   }, [supabase, projectId]);
 
-  function refOf(shot: DBShotUI): { kind: Kind; tone: Tone; id: string } {
+  function refOf(shot: DBShotUI): {
+    kind: Kind;
+    tone: Tone;
+    id: string;
+    imageUrl: string | null;
+  } {
     const match =
       items.find((i) => i.id === shot.refItemId) ||
       items.find((i) => i.id === shot.refImageId);
@@ -73,10 +87,95 @@ export default function ScreenExport({ projectId }: Props) {
       kind: match?.kind || "bottle",
       tone: match?.tone || "amber",
       id: match?.id || shot.refImageId || shot.refItemId || "na",
+      imageUrl: match?.imageUrl ?? null,
     };
   }
 
   const totalDur = shots.reduce((s, sh) => s + sh.duration, 0);
+
+  const conceptTitle =
+    project?.concept_title || (projectId ? "Untitled concept" : "Weightless Ritual · v3");
+  const heroShot = shots[0];
+  const heroRef = heroShot ? refOf(heroShot) : null;
+  const heroBg = heroRef?.imageUrl
+    ? `url("${heroRef.imageUrl}") center/cover`
+    : `url("${shotURI({
+        id: heroRef?.id || "final",
+        kind: heroRef?.kind || "bottle",
+        tone: heroRef?.tone || "amber",
+        w: 600,
+        h: 1000,
+      })}") center/cover`;
+
+  async function handleExport() {
+    if (!projectId) {
+      alert("Open a project first to export its editor pack.");
+      return;
+    }
+    setPacking(true);
+    setPackError(null);
+    try {
+      const res = await exportPack(projectId);
+      if (!res.ok) {
+        let msg = `Export failed: ${res.status}`;
+        try {
+          const j = await res.json();
+          if (j && typeof j.error === "string") msg = j.error;
+        } catch {
+          /* ignore */
+        }
+        setPackError(msg);
+        return;
+      }
+      const blob = await res.blob();
+      const cd = res.headers.get("Content-Disposition") || "";
+      const nameMatch = cd.match(/filename="?([^";]+)"?/i);
+      const filename = nameMatch?.[1] || `frameforge-${projectId}.zip`;
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+    } catch (err) {
+      setPackError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setPacking(false);
+    }
+  }
+
+  async function handleShare() {
+    if (!projectId) {
+      alert("Open a project first to share a preview link.");
+      return;
+    }
+    const origin = typeof window !== "undefined" ? window.location.origin : "";
+    const link = `${origin}/invite/${projectId}?email=`;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(link);
+      } else {
+        // Fallback for older browsers
+        const ta = document.createElement("textarea");
+        ta.value = link;
+        ta.style.position = "fixed";
+        ta.style.left = "-9999px";
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand("copy");
+        ta.remove();
+      }
+      setShareCopied(true);
+      setTimeout(() => setShareCopied(false), 2000);
+    } catch (err) {
+      console.error("share copy failed", err);
+      alert(`Copy failed. Link:\n${link}`);
+    }
+  }
+
+  const hasShots = shots.length > 0;
 
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -96,175 +195,254 @@ export default function ScreenExport({ projectId }: Props) {
                 marginTop: 2,
               }}
             >
-              Weightless Ritual · v3
+              {conceptTitle}
             </div>
           </div>
           <div style={{ flex: 1 }} />
-          <Btn size="sm" icon={<I.Share size={14} />}>Share preview link</Btn>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {shareCopied && (
+              <span
+                style={{
+                  fontSize: 11,
+                  color: "var(--lime)",
+                  fontFamily: "var(--f-mono)",
+                  letterSpacing: 0.3,
+                }}
+              >
+                Copied!
+              </span>
+            )}
+            <Btn size="sm" icon={<I.Share size={14} />} onClick={handleShare}>
+              Share preview link
+            </Btn>
+          </div>
         </div>
 
-        <div
-          style={{
-            aspectRatio: "9 / 16",
-            maxWidth: 380,
-            margin: "0 auto",
-            borderRadius: 14,
-            overflow: "hidden",
-            border: "1px solid var(--iron-2)",
-            boxShadow: "0 30px 60px rgba(0,0,0,0.5)",
-            position: "relative",
-            background: `url("${shotURI({ id: "final", kind: "bottle", tone: "amber", w: 600, h: 1000 })}") center/cover`,
-          }}
-        >
+        {!hasShots && !loading ? (
           <div
             style={{
-              position: "absolute",
-              inset: 0,
-              background: "linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.7))",
-            }}
-          />
-          <div
-            style={{
-              position: "absolute",
-              top: 16,
-              left: 16,
-              padding: "4px 10px",
-              borderRadius: 4,
-              background: "rgba(10,10,12,0.75)",
-              backdropFilter: "blur(10px)",
-              fontSize: 10,
-              fontFamily: "var(--f-mono)",
-              letterSpacing: 1,
-              color: "var(--bone)",
-            }}
-          >
-            9:16 · {totalDur.toFixed(1)}s · 1080p
-          </div>
-          <div
-            style={{
-              position: "absolute",
-              bottom: 80,
-              left: 20,
-              right: 20,
+              maxWidth: 380,
+              margin: "60px auto 0",
+              padding: 40,
               textAlign: "center",
+              border: "1px dashed var(--iron-2)",
+              borderRadius: 12,
+              background: "var(--onyx)",
             }}
           >
             <div
               style={{
-                fontSize: 26,
+                fontSize: 13,
                 fontWeight: 600,
-                color: "#fff",
-                letterSpacing: -0.4,
-                textShadow: "0 2px 8px rgba(0,0,0,0.8)",
+                color: "var(--bone)",
+                marginBottom: 6,
               }}
             >
-              AURA
+              No shots yet
             </div>
-            <div style={{ fontSize: 12, color: "rgba(255,255,255,0.8)", marginTop: 4, letterSpacing: 1 }}>
-              Mornings, re-imagined.
+            <div style={{ fontSize: 12, color: "var(--slate-2)" }}>
+              Go back to the Storyboard to create your first shot.
             </div>
           </div>
-          <div
-            style={{
-              position: "absolute",
-              bottom: 24,
-              left: 20,
-              right: 20,
-              display: "flex",
-              alignItems: "center",
-              gap: 10,
-            }}
-          >
+        ) : (
+          <>
             <div
               style={{
-                width: 44,
-                height: 44,
-                borderRadius: "50%",
-                background: "var(--lime)",
-                color: "var(--lime-ink)",
-                display: "inline-flex",
-                alignItems: "center",
-                justifyContent: "center",
+                aspectRatio: "9 / 16",
+                maxWidth: 380,
+                margin: "0 auto",
+                borderRadius: 14,
+                overflow: "hidden",
+                border: "1px solid var(--iron-2)",
+                boxShadow: "0 30px 60px rgba(0,0,0,0.5)",
+                position: "relative",
+                background: heroBg,
               }}
             >
-              <I.Play size={18} />
-            </div>
-            <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.25)", borderRadius: 2 }}>
-              <div style={{ width: "28%", height: "100%", background: "var(--lime)" }} />
-            </div>
-            <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", color: "#fff" }}>
-              0:03 / 0:{String(Math.round(totalDur)).padStart(2, "0")}
-            </div>
-          </div>
-        </div>
-
-        <div style={{ marginTop: 24, display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
-          {loading && projectId
-            ? Array.from({ length: 4 }).map((_, i) => (
+              <div
+                style={{
+                  position: "absolute",
+                  inset: 0,
+                  background:
+                    "linear-gradient(180deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.7))",
+                }}
+              />
+              <div
+                style={{
+                  position: "absolute",
+                  top: 16,
+                  left: 16,
+                  padding: "4px 10px",
+                  borderRadius: 4,
+                  background: "rgba(10,10,12,0.75)",
+                  backdropFilter: "blur(10px)",
+                  fontSize: 10,
+                  fontFamily: "var(--f-mono)",
+                  letterSpacing: 1,
+                  color: "var(--bone)",
+                }}
+              >
+                {project?.aspect || "9:16"} · {totalDur.toFixed(1)}s · 1080p
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 80,
+                  left: 20,
+                  right: 20,
+                  textAlign: "center",
+                }}
+              >
                 <div
-                  key={i}
                   style={{
-                    width: 80,
-                    height: 140,
-                    borderRadius: 6,
-                    border: "1px solid var(--iron)",
-                    background: "var(--onyx)",
-                    animation: "lime-pulse 1.4s ease-in-out infinite",
-                    opacity: 0.6,
+                    fontSize: 26,
+                    fontWeight: 600,
+                    color: "#fff",
+                    letterSpacing: -0.4,
+                    textShadow: "0 2px 8px rgba(0,0,0,0.8)",
                   }}
-                />
-              ))
-            : shots.map((sh) => {
-                const r = refOf(sh);
-                return (
+                >
+                  {conceptTitle}
+                </div>
+                {project?.concept_hook && (
                   <div
-                    key={sh.dbId}
                     style={{
-                      width: 80,
-                      height: 140,
-                      borderRadius: 6,
-                      background: `url("${shotURI({
-                        id: r.id,
-                        kind: r.kind,
-                        tone: r.tone,
-                        w: 300,
-                        h: 500,
-                      })}") center/cover`,
-                      border: "1px solid var(--iron)",
-                      position: "relative",
-                      overflow: "hidden",
+                      fontSize: 12,
+                      color: "rgba(255,255,255,0.8)",
+                      marginTop: 4,
+                      letterSpacing: 0.3,
+                      lineHeight: 1.4,
+                      maxWidth: 300,
+                      margin: "4px auto 0",
                     }}
                   >
-                    <div
-                      style={{
-                        position: "absolute",
-                        top: 4,
-                        left: 4,
-                        fontSize: 9,
-                        fontFamily: "var(--f-mono)",
-                        color: "#fff",
-                        textShadow: "0 1px 3px rgba(0,0,0,0.8)",
-                      }}
-                    >
-                      #{String(sh.n).padStart(2, "0")}
-                    </div>
-                    <div
-                      style={{
-                        position: "absolute",
-                        bottom: 4,
-                        right: 4,
-                        fontSize: 9,
-                        fontFamily: "var(--f-mono)",
-                        color: "#fff",
-                        textShadow: "0 1px 3px rgba(0,0,0,0.8)",
-                      }}
-                    >
-                      {sh.duration}s
-                    </div>
+                    {project.concept_hook.length > 90
+                      ? project.concept_hook.slice(0, 90) + "…"
+                      : project.concept_hook}
                   </div>
-                );
-              })}
-        </div>
+                )}
+              </div>
+              <div
+                style={{
+                  position: "absolute",
+                  bottom: 24,
+                  left: 20,
+                  right: 20,
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                }}
+              >
+                <div
+                  style={{
+                    width: 44,
+                    height: 44,
+                    borderRadius: "50%",
+                    background: "var(--lime)",
+                    color: "var(--lime-ink)",
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                >
+                  <I.Play size={18} />
+                </div>
+                <div
+                  style={{
+                    flex: 1,
+                    height: 3,
+                    background: "rgba(255,255,255,0.25)",
+                    borderRadius: 2,
+                  }}
+                >
+                  <div style={{ width: "28%", height: "100%", background: "var(--lime)" }} />
+                </div>
+                <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", color: "#fff" }}>
+                  0:03 / 0:{String(Math.round(totalDur)).padStart(2, "0")}
+                </div>
+              </div>
+            </div>
+
+            <div
+              style={{
+                marginTop: 24,
+                display: "flex",
+                gap: 6,
+                justifyContent: "center",
+                flexWrap: "wrap",
+              }}
+            >
+              {loading && projectId
+                ? Array.from({ length: 4 }).map((_, i) => (
+                    <div
+                      key={i}
+                      style={{
+                        width: 80,
+                        height: 140,
+                        borderRadius: 6,
+                        border: "1px solid var(--iron)",
+                        background: "var(--onyx)",
+                        animation: "lime-pulse 1.4s ease-in-out infinite",
+                        opacity: 0.6,
+                      }}
+                    />
+                  ))
+                : shots.map((sh) => {
+                    const r = refOf(sh);
+                    const bg = r.imageUrl
+                      ? `url("${r.imageUrl}") center/cover`
+                      : `url("${shotURI({
+                          id: r.id,
+                          kind: r.kind,
+                          tone: r.tone,
+                          w: 300,
+                          h: 500,
+                        })}") center/cover`;
+                    return (
+                      <div
+                        key={sh.dbId}
+                        style={{
+                          width: 80,
+                          height: 140,
+                          borderRadius: 6,
+                          background: bg,
+                          border: "1px solid var(--iron)",
+                          position: "relative",
+                          overflow: "hidden",
+                        }}
+                      >
+                        <div
+                          style={{
+                            position: "absolute",
+                            top: 4,
+                            left: 4,
+                            fontSize: 9,
+                            fontFamily: "var(--f-mono)",
+                            color: "#fff",
+                            textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                          }}
+                        >
+                          #{String(sh.n).padStart(2, "0")}
+                        </div>
+                        <div
+                          style={{
+                            position: "absolute",
+                            bottom: 4,
+                            right: 4,
+                            fontSize: 9,
+                            fontFamily: "var(--f-mono)",
+                            color: "#fff",
+                            textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                          }}
+                        >
+                          {sh.duration}s
+                        </div>
+                      </div>
+                    );
+                  })}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Right — delivery */}
@@ -367,7 +545,7 @@ export default function ScreenExport({ projectId }: Props) {
 
           <Field
             label="Editor pack"
-            hint="Includes Premiere / DaVinci project, MOGRT titles, LUT, and individual shots."
+            hint="Includes prompts.md, sequence.json, VO script, and every shot image."
           >
             <div
               style={{
@@ -397,7 +575,7 @@ export default function ScreenExport({ projectId }: Props) {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--bone)" }}>Premiere + DaVinci</div>
                 <div style={{ fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>
-                  {shots.length} shots · 3 variants · 1 LUT
+                  {shots.length} shots · refs + prompts + VO
                 </div>
               </div>
               <Toggle checked={true} />
@@ -433,13 +611,31 @@ export default function ScreenExport({ projectId }: Props) {
             <div style={{ flex: 1 }} />
             <span style={{ color: "var(--lime)", fontFamily: "var(--f-mono)" }}>$0.48</span>
           </div>
+          {packError && (
+            <div
+              style={{
+                marginBottom: 10,
+                padding: 8,
+                borderRadius: 6,
+                background: "rgba(255,90,95,0.10)",
+                border: "1px solid rgba(255,90,95,0.3)",
+                color: "var(--coral)",
+                fontSize: 11,
+                lineHeight: 1.4,
+              }}
+            >
+              {packError}
+            </div>
+          )}
           <Btn
             variant="primary"
             size="lg"
-            icon={<I.Download size={16} />}
+            icon={packing ? undefined : <I.Download size={16} />}
             style={{ width: "100%", justifyContent: "center" }}
+            onClick={handleExport}
+            disabled={packing || !hasShots}
           >
-            Render & download
+            {packing ? "Packing…" : "Render & download"}
           </Btn>
         </div>
       </div>
