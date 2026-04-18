@@ -6,104 +6,29 @@ import { SEED_COLLABORATORS } from "@/lib/data";
 import { useSession } from "@/lib/use-session";
 
 // ─────────────────────────────────────────────────────────
-// Windows 11 window controls
-// ─────────────────────────────────────────────────────────
-function WinControls() {
-  const base: React.CSSProperties = {
-    width: 46,
-    height: 32,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    cursor: "default",
-    transition: "background 120ms var(--e-out)",
-    color: "#c6c6cb",
-  };
-  const [h, setH] = useState<string | null>(null);
-  return (
-    <div style={{ display: "flex" }}>
-      <div
-        style={{ ...base, background: h === "min" ? "rgba(255,255,255,0.06)" : "transparent" }}
-        onMouseEnter={() => setH("min")}
-        onMouseLeave={() => setH(null)}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M0 5h10" stroke="currentColor" strokeWidth="1" />
-        </svg>
-      </div>
-      <div
-        style={{ ...base, background: h === "max" ? "rgba(255,255,255,0.06)" : "transparent" }}
-        onMouseEnter={() => setH("max")}
-        onMouseLeave={() => setH(null)}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <rect x="0.5" y="0.5" width="9" height="9" fill="none" stroke="currentColor" strokeWidth="1" />
-        </svg>
-      </div>
-      <div
-        style={{
-          ...base,
-          width: 46,
-          background: h === "close" ? "#e81123" : "transparent",
-          color: h === "close" ? "#fff" : "#c6c6cb",
-        }}
-        onMouseEnter={() => setH("close")}
-        onMouseLeave={() => setH(null)}
-      >
-        <svg width="10" height="10" viewBox="0 0 10 10">
-          <path d="M0 0l10 10M10 0L0 10" stroke="currentColor" strokeWidth="1" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────
-// Window shell — titlebar + body
+// Full-viewport app shell — no fake desktop window chrome
 // ─────────────────────────────────────────────────────────
 export function WindowShell({
   children,
-  title = "FrameForge",
-  height = 900,
+  title,
 }: {
   children: React.ReactNode;
   title?: string;
-  height?: number;
 }) {
+  useEffect(() => {
+    if (typeof document !== "undefined" && title) document.title = title;
+  }, [title]);
   return (
     <div
       style={{
-        width: 1440,
-        height,
-        margin: "24px auto",
+        width: "100vw",
+        height: "100vh",
         background: "var(--graphite)",
-        border: "1px solid rgba(255,255,255,0.06)",
-        borderRadius: 8,
         overflow: "hidden",
-        boxShadow: "0 40px 80px rgba(0,0,0,0.6), 0 0 0 1px rgba(0,0,0,0.4)",
         display: "flex",
         flexDirection: "column",
       }}
     >
-      <div
-        style={{
-          height: 32,
-          flexShrink: 0,
-          background: "var(--graphite)",
-          borderBottom: "1px solid rgba(255,255,255,0.04)",
-          display: "flex",
-          alignItems: "center",
-          position: "relative",
-        }}
-      >
-        <div style={{ width: 12 }} />
-        <I.Spark size={16} />
-        <div style={{ marginLeft: 8, fontSize: 12, fontWeight: 500, color: "#d4d4d8", letterSpacing: 0.1 }}>
-          {title}
-        </div>
-        <div style={{ flex: 1 }} />
-        <WinControls />
-      </div>
       {children}
     </div>
   );
