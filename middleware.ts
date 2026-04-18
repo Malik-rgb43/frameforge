@@ -18,11 +18,21 @@ export async function middleware(request: NextRequest) {
     }
   );
 
+  const pathname = request.nextUrl.pathname;
+  const code = request.nextUrl.searchParams.get("code");
+
+  // Supabase may redirect the magic-link email to "/?code=..." if the project's
+  // Site URL is stale. Re-route to the proper callback so session exchange happens.
+  if (code && pathname === "/") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/auth/callback";
+    return NextResponse.redirect(url);
+  }
+
   const {
     data: { user },
   } = await supabase.auth.getUser();
 
-  const pathname = request.nextUrl.pathname;
   const isAuthFlow = pathname === "/login" || pathname.startsWith("/auth/");
 
   if (!user && !isAuthFlow) {
