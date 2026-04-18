@@ -1,8 +1,9 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { I } from "./icons";
 import { iconBtnStyle } from "./ui";
 import { SEED_COLLABORATORS } from "@/lib/data";
+import { useSession } from "@/lib/use-session";
 
 // ─────────────────────────────────────────────────────────
 // Windows 11 window controls
@@ -336,22 +337,172 @@ export function LeftRail({
         );
       })}
       <div style={{ flex: 1 }} />
+      <AccountMenu />
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────
+// Account menu — shows current user email + logout.
+// ─────────────────────────────────────────────────────────
+function AccountMenu() {
+  const { user, signOut } = useSession();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const email = user?.email ?? "";
+  const initials = email
+    ? email
+        .split("@")[0]
+        .split(/[._-]+/)
+        .slice(0, 2)
+        .map((s) => s[0]?.toUpperCase() ?? "")
+        .join("")
+    : "";
+
+  async function handleSignOut() {
+    await signOut();
+    // Full reload so middleware re-evaluates and sends us to /login.
+    if (typeof window !== "undefined") window.location.href = "/login";
+  }
+
+  return (
+    <div ref={wrapRef} style={{ position: "relative" }}>
       <button
+        onClick={() => setOpen((v) => !v)}
+        title={email || "Account"}
         style={{
           width: 40,
           height: 40,
           borderRadius: 8,
-          background: "transparent",
+          background: open ? "rgba(255,255,255,0.06)" : "transparent",
           border: "1px solid transparent",
-          color: "var(--slate-2)",
+          color: user ? "var(--bone)" : "var(--slate-2)",
           display: "inline-flex",
           alignItems: "center",
           justifyContent: "center",
           cursor: "pointer",
+          position: "relative",
+        }}
+        onMouseEnter={(e) => {
+          if (!open) e.currentTarget.style.background = "rgba(255,255,255,0.04)";
+        }}
+        onMouseLeave={(e) => {
+          if (!open) e.currentTarget.style.background = "transparent";
         }}
       >
-        <I.User size={18} />
+        {initials ? (
+          <div
+            style={{
+              width: 26,
+              height: 26,
+              borderRadius: "50%",
+              background: "var(--lime)",
+              color: "var(--lime-ink)",
+              fontSize: 10,
+              fontWeight: 700,
+              fontFamily: "var(--f-mono)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            {initials || "?"}
+          </div>
+        ) : (
+          <I.User size={18} />
+        )}
       </button>
+
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            left: "calc(100% + 8px)",
+            bottom: 0,
+            minWidth: 240,
+            background: "var(--onyx)",
+            border: "1px solid var(--iron-2)",
+            borderRadius: 10,
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            padding: 6,
+            zIndex: 60,
+            animation: "float-fade 160ms var(--e-out)",
+          }}
+        >
+          <div
+            style={{
+              padding: "10px 12px",
+              borderBottom: "1px solid var(--iron)",
+              marginBottom: 4,
+            }}
+          >
+            <div
+              style={{
+                fontSize: 10,
+                fontFamily: "var(--f-mono)",
+                letterSpacing: 1.2,
+                color: "var(--slate-2)",
+                marginBottom: 4,
+              }}
+            >
+              SIGNED IN AS
+            </div>
+            <div
+              style={{
+                fontSize: 13,
+                color: "var(--bone)",
+                fontWeight: 500,
+                wordBreak: "break-all",
+              }}
+            >
+              {email || "—"}
+            </div>
+          </div>
+          <button
+            onClick={handleSignOut}
+            style={menuItemStyle()}
+            onMouseEnter={(e) =>
+              (e.currentTarget.style.background = "rgba(255,255,255,0.04)")
+            }
+            onMouseLeave={(e) =>
+              (e.currentTarget.style.background = "transparent")
+            }
+          >
+            <I.ArrowLeft size={14} />
+            <span>Sign out</span>
+          </button>
+        </div>
+      )}
     </div>
   );
 }
+
+const menuItemStyle = (): React.CSSProperties => ({
+  width: "100%",
+  height: 32,
+  padding: "0 10px",
+  background: "transparent",
+  border: "none",
+  borderRadius: 6,
+  color: "var(--bone)",
+  fontSize: 12,
+  fontWeight: 500,
+  display: "inline-flex",
+  alignItems: "center",
+  gap: 8,
+  cursor: "pointer",
+  textAlign: "left",
+  transition: "background 120ms var(--e-out)",
+});

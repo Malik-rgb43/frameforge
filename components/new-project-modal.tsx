@@ -8,17 +8,28 @@ export default function NewProjectModal({
   open,
   onClose,
   onCreate,
+  busy,
 }: {
   open: boolean;
   onClose: () => void;
-  onCreate: () => void;
+  onCreate: (data: { name: string; client: string; aspect: Aspect }) => void | Promise<void>;
+  busy?: boolean;
 }) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState("");
+  const [client, setClient] = useState("");
   const [aspect, setAspect] = useState<Aspect>("9:16");
   const [mode, setMode] = useState("upload");
 
   if (!open) return null;
+
+  const canContinue = name.trim().length > 0;
+
+  function handleSubmit() {
+    if (busy) return;
+    const safeName = name.trim() || "Untitled project";
+    onCreate({ name: safeName, client: client.trim(), aspect });
+  }
 
   return (
     <div
@@ -68,7 +79,7 @@ export default function NewProjectModal({
                 <Input value={name} onChange={setName} placeholder="e.g. AURA — Morning Campaign" />
               </Field>
               <Field label="Client / brand">
-                <Input placeholder="Aura Skincare" />
+                <Input value={client} onChange={setClient} placeholder="Aura Skincare" />
               </Field>
               <Field label="Aspect ratio" hint="You can override this per shot later.">
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8 }}>
@@ -205,10 +216,11 @@ export default function NewProjectModal({
           <Btn
             variant="primary"
             icon={step === 0 ? <I.ArrowRight size={14} /> : <I.Sparkles size={14} />}
-            onClick={() => (step === 0 ? setStep(1) : onCreate())}
+            onClick={() => (step === 0 ? setStep(1) : handleSubmit())}
+            disabled={step === 0 ? !canContinue : busy}
             style={{ marginLeft: 8 }}
           >
-            {step === 0 ? "Continue" : "Create project"}
+            {step === 0 ? "Continue" : busy ? "Creating…" : "Create project"}
           </Btn>
         </div>
       </div>

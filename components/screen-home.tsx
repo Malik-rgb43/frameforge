@@ -9,13 +9,16 @@ type FilterValue = "all" | ProjectStatus;
 export default function ScreenHome({
   onOpenProject,
   onNewProject,
+  projects: projectsProp,
 }: {
   onOpenProject: (p: Project) => void;
   onNewProject: () => void;
+  projects?: Project[];
 }) {
   const [view, setView] = useState<"grid" | "list">("grid");
   const [filter, setFilter] = useState<FilterValue>("all");
-  const projects = DEFAULT_PROJECTS.filter((p) => filter === "all" || p.status === filter);
+  const source = projectsProp ?? DEFAULT_PROJECTS;
+  const projects = source.filter((p) => filter === "all" || p.status === filter);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden" }}>

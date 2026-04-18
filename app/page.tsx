@@ -1,5 +1,5 @@
 "use client";
-import React, { useEffect, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { WindowShell, AppHeader, LeftRail, type ScreenId } from "@/components/chrome";
 import ScreenHome from "@/components/screen-home";
 import ScreenConcept from "@/components/screen-concept";
@@ -9,6 +9,46 @@ import ScreenExport from "@/components/screen-export";
 import NewProjectModal from "@/components/new-project-modal";
 import ProjectSettings from "@/components/settings";
 import { DEFAULT_PROJECTS, type Project } from "@/lib/data";
+import { createClient } from "@/lib/supabase-client";
+import {
+  createProject,
+  dbToProject,
+  listMyProjects,
+  type DBProject,
+} from "@/lib/queries";
+import { useSession } from "@/lib/use-session";
+
+function useProjects() {
+  const supabase = useMemo(() => createClient(), []);
+  const { user } = useSession();
+  const [rows, setRows] = useState<DBProject[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const refresh = useCallback(async () => {
+    if (!user) {
+      setRows([]);
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await listMyProjects(supabase);
+      setRows(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load projects");
+    } finally {
+      setLoading(false);
+    }
+  }, [supabase, user]);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  return { rows, loading, error, refresh, supabase };
+}
 
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>("home");
@@ -16,6 +56,10 @@ export default function App() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [newProjectOpen, setNewProjectOpen] = useState(false);
   const [focusShot, setFocusShot] = useState<number | null>(null);
+  const [creating, setCreating] = useState(false);
+  const { rows, refresh, supabase } = useProjects();
+
+  const projects: Project[] = useMemo(() => rows.map(dbToProject), [rows]);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("ff-screen") : null;
@@ -34,6 +78,27 @@ export default function App() {
     return screen === "home" ? [] : b;
   })();
 
+  async function handleCreateProject(data: { name: string; client: string; aspect: Project["aspect"] }) {
+    setCreating(true);
+    try {
+      const row = await createProject(supabase, {
+        name: data.name,
+        client: data.client || undefined,
+        aspect: data.aspect,
+      });
+      const asProject = dbToProject(row);
+      setProject(asProject);
+      await refresh();
+      setNewProjectOpen(false);
+      setScreen("concept");
+    } catch (err) {
+      console.error(err);
+      alert(err instanceof Error ? err.message : "Failed to create project");
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <WindowShell title={screen === "home" ? "FrameForge — Projects" : `FrameForge — ${project.name}`}>
       <div style={{ flex: 1, display: "flex", overflow: "hidden", position: "relative" }}>
@@ -47,6 +112,7 @@ export default function App() {
           />
           {screen === "home" && (
             <ScreenHome
+              projects={projects}
               onOpenProject={(p) => {
                 setProject(p);
                 setScreen("concept");
@@ -75,10 +141,8 @@ export default function App() {
       <NewProjectModal
         open={newProjectOpen}
         onClose={() => setNewProjectOpen(false)}
-        onCreate={() => {
-          setNewProjectOpen(false);
-          setScreen("concept");
-        }}
+        onCreate={handleCreateProject}
+        busy={creating}
       />
     </WindowShell>
   );
