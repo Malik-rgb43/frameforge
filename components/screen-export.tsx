@@ -1,15 +1,82 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { I } from "./icons";
 import { Btn, Field, Segmented, Toggle } from "./ui";
-import { SEED_PRODUCT_IMAGES, SEED_SHOTS, shotURI } from "@/lib/data";
+import {
+  SEED_PRODUCT_IMAGES,
+  SEED_SHOTS,
+  shotURI,
+  type Kind,
+  type Tone,
+} from "@/lib/data";
+import { createClient } from "@/lib/supabase-client";
+import { listShots, type DBShotUI } from "@/lib/queries-shots";
+import { listBoardItems, type DBBoardItemUI } from "@/lib/queries-board";
 
 type Format = "mp4-h264" | "mp4-h265" | "prores" | "webm";
 type Res = "720p" | "1080p" | "4k";
 
-export default function ScreenExport() {
+interface Props {
+  projectId?: string | null;
+}
+
+export default function ScreenExport({ projectId }: Props) {
+  const supabase = useMemo(() => createClient(), []);
+  const [shots, setShots] = useState<DBShotUI[]>([]);
+  const [items, setItems] = useState<DBBoardItemUI[]>([]);
+  const [loading, setLoading] = useState(true);
   const [format, setFormat] = useState<Format>("mp4-h264");
   const [res, setRes] = useState<Res>("1080p");
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!projectId) {
+        if (!active) return;
+        const staticShots: DBShotUI[] = SEED_SHOTS.map((s, i) => ({
+          ...s,
+          dbId: s.refImageId + "-" + i,
+          orderIndex: i,
+          refItemId: s.refImageId,
+        }));
+        setShots(staticShots);
+        setItems(SEED_PRODUCT_IMAGES.map((s) => ({ ...s })));
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const [s, it] = await Promise.all([
+          listShots(supabase, projectId),
+          listBoardItems(supabase, projectId),
+        ]);
+        if (!active) return;
+        setShots(s);
+        setItems(it);
+      } catch (err) {
+        console.error("load export", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, [supabase, projectId]);
+
+  function refOf(shot: DBShotUI): { kind: Kind; tone: Tone; id: string } {
+    const match =
+      items.find((i) => i.id === shot.refItemId) ||
+      items.find((i) => i.id === shot.refImageId);
+    return {
+      kind: match?.kind || "bottle",
+      tone: match?.tone || "amber",
+      id: match?.id || shot.refImageId || shot.refItemId || "na",
+    };
+  }
+
+  const totalDur = shots.reduce((s, sh) => s + sh.duration, 0);
 
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
@@ -71,7 +138,7 @@ export default function ScreenExport() {
               color: "var(--bone)",
             }}
           >
-            9:16 \· 12.0s \· 1080p
+            9:16 \· {totalDur.toFixed(1)}s \· 1080p
           </div>
           <div
             style={{
@@ -125,61 +192,78 @@ export default function ScreenExport() {
             <div style={{ flex: 1, height: 3, background: "rgba(255,255,255,0.25)", borderRadius: 2 }}>
               <div style={{ width: "28%", height: "100%", background: "var(--lime)" }} />
             </div>
-            <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", color: "#fff" }}>0:03 / 0:12</div>
+            <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", color: "#fff" }}>
+              0:03 / 0:{String(Math.round(totalDur)).padStart(2, "0")}
+            </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 24, display: "flex", gap: 6, justifyContent: "center" }}>
-          {SEED_SHOTS.map((sh) => {
-            const it = SEED_PRODUCT_IMAGES.find((i) => i.id === sh.refImageId);
-            return (
-              <div
-                key={sh.n}
-                style={{
-                  width: 80,
-                  height: 140,
-                  borderRadius: 6,
-                  background: `url("${shotURI({
-                    id: sh.refImageId,
-                    kind: it?.kind || "bottle",
-                    tone: it?.tone || "amber",
-                    w: 300,
-                    h: 500,
-                  })}") center/cover`,
-                  border: "1px solid var(--iron)",
-                  position: "relative",
-                  overflow: "hidden",
-                }}
-              >
+        <div style={{ marginTop: 24, display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap" }}>
+          {loading && projectId
+            ? Array.from({ length: 4 }).map((_, i) => (
                 <div
+                  key={i}
                   style={{
-                    position: "absolute",
-                    top: 4,
-                    left: 4,
-                    fontSize: 9,
-                    fontFamily: "var(--f-mono)",
-                    color: "#fff",
-                    textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                    width: 80,
+                    height: 140,
+                    borderRadius: 6,
+                    border: "1px solid var(--iron)",
+                    background: "var(--onyx)",
+                    animation: "lime-pulse 1.4s ease-in-out infinite",
+                    opacity: 0.6,
                   }}
-                >
-                  #{String(sh.n).padStart(2, "0")}
-                </div>
-                <div
-                  style={{
-                    position: "absolute",
-                    bottom: 4,
-                    right: 4,
-                    fontSize: 9,
-                    fontFamily: "var(--f-mono)",
-                    color: "#fff",
-                    textShadow: "0 1px 3px rgba(0,0,0,0.8)",
-                  }}
-                >
-                  {sh.duration}s
-                </div>
-              </div>
-            );
-          })}
+                />
+              ))
+            : shots.map((sh) => {
+                const r = refOf(sh);
+                return (
+                  <div
+                    key={sh.dbId}
+                    style={{
+                      width: 80,
+                      height: 140,
+                      borderRadius: 6,
+                      background: `url("${shotURI({
+                        id: r.id,
+                        kind: r.kind,
+                        tone: r.tone,
+                        w: 300,
+                        h: 500,
+                      })}") center/cover`,
+                      border: "1px solid var(--iron)",
+                      position: "relative",
+                      overflow: "hidden",
+                    }}
+                  >
+                    <div
+                      style={{
+                        position: "absolute",
+                        top: 4,
+                        left: 4,
+                        fontSize: 9,
+                        fontFamily: "var(--f-mono)",
+                        color: "#fff",
+                        textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                      }}
+                    >
+                      #{String(sh.n).padStart(2, "0")}
+                    </div>
+                    <div
+                      style={{
+                        position: "absolute",
+                        bottom: 4,
+                        right: 4,
+                        fontSize: 9,
+                        fontFamily: "var(--f-mono)",
+                        color: "#fff",
+                        textShadow: "0 1px 3px rgba(0,0,0,0.8)",
+                      }}
+                    >
+                      {sh.duration}s
+                    </div>
+                  </div>
+                );
+              })}
         </div>
       </div>
 
@@ -313,7 +397,7 @@ export default function ScreenExport() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 12, fontWeight: 500, color: "var(--bone)" }}>Premiere + DaVinci</div>
                 <div style={{ fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>
-                  4 shots \· 3 variants \· 1 LUT
+                  {shots.length} shots \· 3 variants \· 1 LUT
                 </div>
               </div>
               <Toggle checked={true} />

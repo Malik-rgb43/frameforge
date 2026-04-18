@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { I } from "./icons";
 import {
   Btn,
@@ -15,14 +15,65 @@ import {
   SEED_PRODUCT_IMAGES,
   SEED_SHOTS,
   shotURI,
-  type Shot,
+  type Kind,
+  type Tone,
 } from "@/lib/data";
+import { createClient } from "@/lib/supabase-client";
+import { listShots, type DBShotUI } from "@/lib/queries-shots";
+import { listBoardItems, type DBBoardItemUI } from "@/lib/queries-board";
 
-export default function ScreenStoryboard({ initialShot }: { initialShot: number | null }) {
+interface Props {
+  initialShot: number | null;
+  projectId?: string | null;
+}
+
+export default function ScreenStoryboard({ initialShot, projectId }: Props) {
+  const supabase = useMemo(() => createClient(), []);
+  const [shots, setShots] = useState<DBShotUI[]>([]);
+  const [items, setItems] = useState<DBBoardItemUI[]>([]);
+  const [loading, setLoading] = useState(true);
   const [sel, setSel] = useState(initialShot || 2);
   const [detailOpen, setDetailOpen] = useState(false);
   const [scrub] = useState(3.2);
-  const totalDur = SEED_SHOTS.reduce((s, sh) => s + sh.duration, 0);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!projectId) {
+        // Static fallback for preview/unauth'd paths.
+        if (!active) return;
+        const staticShots: DBShotUI[] = SEED_SHOTS.map((s, i) => ({
+          ...s,
+          dbId: s.refImageId + "-" + i,
+          orderIndex: i,
+          refItemId: s.refImageId,
+        }));
+        const staticItems: DBBoardItemUI[] = SEED_PRODUCT_IMAGES.map((s) => ({ ...s }));
+        setShots(staticShots);
+        setItems(staticItems);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const [s, it] = await Promise.all([
+          listShots(supabase, projectId),
+          listBoardItems(supabase, projectId),
+        ]);
+        if (!active) return;
+        setShots(s);
+        setItems(it);
+      } catch (err) {
+        console.error("load storyboard", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, [supabase, projectId]);
 
   useEffect(() => {
     if (initialShot) {
@@ -31,8 +82,59 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
     }
   }, [initialShot]);
 
-  const selected = SEED_SHOTS.find((s) => s.n === sel)!;
-  const selectedRef = SEED_PRODUCT_IMAGES.find((i) => i.id === selected.refImageId);
+  const totalDur = shots.reduce((s, sh) => s + sh.duration, 0);
+
+  function refOf(shot: DBShotUI): { kind: Kind; tone: Tone; id: string } {
+    // Match by DB id first (real data), then by legacy seed id.
+    const match =
+      items.find((i) => i.id === shot.refItemId) ||
+      items.find((i) => i.id === shot.refImageId);
+    return {
+      kind: match?.kind || "bottle",
+      tone: match?.tone || "amber",
+      id: match?.id || shot.refImageId || shot.refItemId || "na",
+    };
+  }
+
+  if (loading && projectId) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--lime)",
+          fontSize: 11,
+          fontFamily: "var(--f-mono)",
+          letterSpacing: 1.5,
+          animation: "lime-pulse 1.4s ease-in-out infinite",
+        }}
+      >
+        LOADING STORYBOARD...
+      </div>
+    );
+  }
+
+  if (shots.length === 0) {
+    return (
+      <div
+        style={{
+          flex: 1,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          color: "var(--slate-2)",
+          fontSize: 12,
+        }}
+      >
+        No shots yet.
+      </div>
+    );
+  }
+
+  const selected = shots.find((s) => s.n === sel) ?? shots[0];
+  const selectedRef = refOf(selected);
 
   return (
     <div style={{ flex: 1, display: "flex", flexDirection: "column", overflow: "hidden", position: "relative" }}>
@@ -40,7 +142,7 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
       <div style={{ padding: "20px 28px 14px", display: "flex", alignItems: "center", gap: 10 }}>
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", letterSpacing: 1.5, color: "var(--slate-2)" }}>
-            STORYBOARD \· {SEED_SHOTS.length} SHOTS \· {totalDur.toFixed(1)}S
+            STORYBOARD \· {shots.length} SHOTS \· {totalDur.toFixed(1)}S
           </div>
           <div
             style={{
@@ -71,9 +173,9 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
             overflow: "hidden",
             border: "1px solid var(--iron)",
             background: `url("${shotURI({
-              id: selected.refImageId,
-              kind: selectedRef?.kind || "bottle",
-              tone: selectedRef?.tone || "amber",
+              id: selectedRef.id,
+              kind: selectedRef.kind,
+              tone: selectedRef.tone,
               w: 600,
               h: 1000,
             })}") center/cover`,
@@ -262,14 +364,14 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 60, fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>VIDEO</div>
             <div style={{ flex: 1, display: "flex", gap: 2, position: "relative" }}>
-              {SEED_SHOTS.map((sh) => {
+              {shots.map((sh) => {
                 const w = (sh.duration / totalDur) * 100;
                 const isSel = sh.n === sel;
                 const isGen = sh.status === "generating";
-                const item = SEED_PRODUCT_IMAGES.find((i) => i.id === sh.refImageId);
+                const r = refOf(sh);
                 return (
                   <div
-                    key={sh.n}
+                    key={sh.dbId}
                     onClick={() => setSel(sh.n)}
                     style={{
                       flex: `0 0 ${w}%`,
@@ -277,9 +379,9 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
                       borderRadius: 4,
                       border: isSel ? "2px solid var(--lime)" : "1px solid var(--iron-2)",
                       background: `url("${shotURI({
-                        id: sh.refImageId,
-                        kind: item?.kind || "bottle",
-                        tone: item?.tone || "amber",
+                        id: r.id,
+                        kind: r.kind,
+                        tone: r.tone,
                         w: 400,
                         h: 400,
                       })}") center/cover`,
@@ -393,12 +495,12 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div style={{ width: 60, fontSize: 10, color: "var(--slate-2)", fontFamily: "var(--f-mono)" }}>VO</div>
             <div style={{ flex: 1, display: "flex", gap: 2 }}>
-              {SEED_SHOTS.map((sh) => {
+              {shots.map((sh) => {
                 const w = (sh.duration / totalDur) * 100;
                 const hasVO = !!sh.vo;
                 return (
                   <div
-                    key={sh.n}
+                    key={sh.dbId}
                     style={{
                       flex: `0 0 ${w}%`,
                       height: 22,
@@ -500,14 +602,23 @@ export default function ScreenStoryboard({ initialShot }: { initialShot: number 
         title={`Shot ${String(selected.n).padStart(2, "0")} — ${selected.title}`}
         width={460}
       >
-        <ShotDetailPanel shot={selected} />
+        <ShotDetailPanel shot={selected} refKind={selectedRef.kind} refTone={selectedRef.tone} refId={selectedRef.id} />
       </SlideOver>
     </div>
   );
 }
 
-function ShotDetailPanel({ shot }: { shot: Shot }) {
-  const item = SEED_PRODUCT_IMAGES.find((i) => i.id === shot.refImageId);
+function ShotDetailPanel({
+  shot,
+  refKind,
+  refTone,
+  refId,
+}: {
+  shot: DBShotUI;
+  refKind: Kind;
+  refTone: Tone;
+  refId: string;
+}) {
   return (
     <div style={{ padding: 18 }}>
       <div
@@ -515,9 +626,9 @@ function ShotDetailPanel({ shot }: { shot: Shot }) {
           aspectRatio: "9 / 16",
           borderRadius: 10,
           background: `url("${shotURI({
-            id: shot.refImageId,
-            kind: item?.kind || "bottle",
-            tone: item?.tone || "amber",
+            id: refId,
+            kind: refKind,
+            tone: refTone,
             w: 600,
             h: 1000,
           })}") center/cover`,

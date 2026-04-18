@@ -1,11 +1,98 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { I } from "./icons";
 import { Btn, Chip, Field, Input, Textarea } from "./ui";
-import { SEED_CONCEPTS, SEED_PRODUCT_IMAGES, shotURI, type Concept } from "@/lib/data";
+import {
+  SEED_CONCEPTS,
+  SEED_PRODUCT_IMAGES,
+  shotURI,
+  type Concept,
+} from "@/lib/data";
+import { createClient } from "@/lib/supabase-client";
+import {
+  listConcepts,
+  setSelectedConcept,
+  type DBConceptUI,
+} from "@/lib/queries-concepts";
+import { listBoardItems, type DBBoardItemUI } from "@/lib/queries-board";
 
-export default function ScreenConcept({ onNext }: { onNext: () => void }) {
-  const [selected, setSelected] = useState("c1");
+interface Props {
+  onNext: () => void;
+  projectId?: string | null;
+}
+
+export default function ScreenConcept({ onNext, projectId }: Props) {
+  const supabase = useMemo(() => createClient(), []);
+  const [concepts, setConcepts] = useState<DBConceptUI[] | null>(null);
+  const [refs, setRefs] = useState<DBBoardItemUI[]>([]);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!projectId) {
+        if (!active) return;
+        setConcepts(null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const [rows, items] = await Promise.all([
+          listConcepts(supabase, projectId),
+          listBoardItems(supabase, projectId),
+        ]);
+        if (!active) return;
+        setConcepts(rows);
+        setRefs(items.filter((i) => i.isRef));
+        const pre = rows.find((c) => c.isSelected) ?? rows[0];
+        setSelected(pre?.dbId ?? null);
+      } catch (err) {
+        console.error("load concepts", err);
+        if (!active) return;
+        setConcepts([]);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, [supabase, projectId]);
+
+  async function handleSelect(conceptId: string) {
+    setSelected(conceptId);
+    if (!projectId) return;
+    try {
+      await setSelectedConcept(supabase, projectId, conceptId);
+      setConcepts((prev) =>
+        prev
+          ? prev.map((c) => ({ ...c, isSelected: c.dbId === conceptId }))
+          : prev
+      );
+    } catch (err) {
+      console.error("setSelectedConcept", err);
+    }
+  }
+
+  // When no project is open (e.g. rendered from /login), fall back to the
+  // seed array — preserves visuals for static preview.
+  const viewConcepts: DBConceptUI[] | Concept[] =
+    concepts && concepts.length > 0
+      ? concepts
+      : !projectId
+      ? SEED_CONCEPTS.map((c, i) => ({
+          ...c,
+          dbId: c.id,
+          isSelected: i === 0,
+        }))
+      : [];
+
+  const viewRefs =
+    refs.length > 0 ? refs : !projectId ? SEED_PRODUCT_IMAGES.filter((i) => i.isRef).slice(0, 3) : [];
+
   return (
     <div style={{ flex: 1, display: "flex", overflow: "hidden" }}>
       {/* Left — brief */}
@@ -86,19 +173,17 @@ export default function ScreenConcept({ onNext }: { onNext: () => void }) {
           REFERENCES
         </div>
         <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6 }}>
-          {SEED_PRODUCT_IMAGES.filter((i) => i.isRef)
-            .slice(0, 3)
-            .map((i) => (
-              <div
-                key={i.id}
-                style={{
-                  aspectRatio: "1",
-                  background: `url("${shotURI({ id: i.id, kind: i.kind, tone: i.tone, w: 300, h: 300 })}") center/cover`,
-                  border: "1px solid var(--iron)",
-                  borderRadius: 6,
-                }}
-              />
-            ))}
+          {viewRefs.slice(0, 3).map((i) => (
+            <div
+              key={i.id}
+              style={{
+                aspectRatio: "1",
+                background: `url("${shotURI({ id: i.id, kind: i.kind, tone: i.tone, w: 300, h: 300 })}") center/cover`,
+                border: "1px solid var(--iron)",
+                borderRadius: 6,
+              }}
+            />
+          ))}
         </div>
       </div>
 
@@ -133,42 +218,69 @@ export default function ScreenConcept({ onNext }: { onNext: () => void }) {
           </Btn>
         </div>
 
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
-          {SEED_CONCEPTS.map((c, i) => (
-            <ConceptCard
-              key={c.id}
-              c={c}
-              idx={i}
-              selected={selected === c.id}
-              onClick={() => setSelected(c.id)}
-            />
-          ))}
-          <div
-            style={{
-              padding: 20,
-              border: "1px dashed var(--iron-2)",
-              borderRadius: 12,
-              display: "flex",
-              flexDirection: "column",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 8,
-              minHeight: 260,
-              cursor: "pointer",
-            }}
-          >
-            <div style={{ color: "var(--lime)" }}>
-              <I.Edit size={22} />
-            </div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bone)" }}>Write your own</div>
-            <div style={{ fontSize: 11, color: "var(--slate-2)", textAlign: "center" }}>
-              Paste a storyboard, moodboard,
-              <br />
-              or reference link.
+        {loading && projectId ? (
+          <ConceptSkeletons />
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+            {viewConcepts.map((c, i) => {
+              const id = (c as DBConceptUI).dbId ?? c.id;
+              return (
+                <ConceptCard
+                  key={id}
+                  c={c}
+                  idx={i}
+                  selected={selected === id}
+                  onClick={() => handleSelect(id)}
+                />
+              );
+            })}
+            <div
+              style={{
+                padding: 20,
+                border: "1px dashed var(--iron-2)",
+                borderRadius: 12,
+                display: "flex",
+                flexDirection: "column",
+                alignItems: "center",
+                justifyContent: "center",
+                gap: 8,
+                minHeight: 260,
+                cursor: "pointer",
+              }}
+            >
+              <div style={{ color: "var(--lime)" }}>
+                <I.Edit size={22} />
+              </div>
+              <div style={{ fontSize: 13, fontWeight: 500, color: "var(--bone)" }}>Write your own</div>
+              <div style={{ fontSize: 11, color: "var(--slate-2)", textAlign: "center" }}>
+                Paste a storyboard, moodboard,
+                <br />
+                or reference link.
+              </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
+    </div>
+  );
+}
+
+function ConceptSkeletons() {
+  return (
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14 }}>
+      {Array.from({ length: 5 }).map((_, i) => (
+        <div
+          key={i}
+          style={{
+            minHeight: 260,
+            borderRadius: 12,
+            border: "1px solid var(--iron)",
+            background: "var(--onyx)",
+            animation: "lime-pulse 1.4s ease-in-out infinite",
+            opacity: 0.6,
+          }}
+        />
+      ))}
     </div>
   );
 }
@@ -179,7 +291,7 @@ function ConceptCard({
   onClick,
   idx,
 }: {
-  c: Concept;
+  c: Concept | DBConceptUI;
   selected: boolean;
   onClick: () => void;
   idx: number;

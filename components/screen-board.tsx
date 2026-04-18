@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { I } from "./icons";
 import { Btn, Chip, Field, Input, Segmented, StatusDot, Textarea, Toggle, iconBtnStyle } from "./ui";
 import {
@@ -7,17 +7,82 @@ import {
   SEED_REF_LINKS,
   SEED_PROMPTS,
   shotURI,
-  type BoardItem,
+  type RefLink,
 } from "@/lib/data";
+import { createClient } from "@/lib/supabase-client";
+import {
+  listBoardItems,
+  listConnections,
+  type DBBoardItemUI,
+} from "@/lib/queries-board";
 
 type Mode = "image" | "video";
 
-export default function ScreenBoard({ onShot }: { onShot: (n: number) => void }) {
-  const [items] = useState<BoardItem[]>(SEED_PRODUCT_IMAGES);
-  const [links] = useState(SEED_REF_LINKS);
+interface Props {
+  onShot: (n: number) => void;
+  projectId?: string | null;
+}
+
+// Fallback prompt lookup by filename — lets us reuse SEED_PROMPTS after
+// uuid remap (DB rows don't preserve the original "gen-1" seed id).
+function fallbackPrompt(filename: string | null | undefined):
+  | { image: string; video: string; videoModel: string; usedInShot?: number }
+  | undefined {
+  if (!filename) return undefined;
+  const seed = SEED_PRODUCT_IMAGES.find((s) => s.filename === filename);
+  if (!seed) return undefined;
+  return SEED_PROMPTS[seed.id];
+}
+
+export default function ScreenBoard({ onShot, projectId }: Props) {
+  const supabase = useMemo(() => createClient(), []);
+  const [items, setItems] = useState<DBBoardItemUI[]>([]);
+  const [links, setLinks] = useState<RefLink[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [promptCard, setPromptCard] = useState<string | null>("gen-1");
+  const [promptCard, setPromptCard] = useState<string | null>(null);
   const [mode, setMode] = useState<Mode>("image");
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let active = true;
+    async function load() {
+      if (!projectId) {
+        // Static preview fallback — matches the original design exactly.
+        if (!active) return;
+        const staticItems: DBBoardItemUI[] = SEED_PRODUCT_IMAGES.map((s) => ({
+          ...s,
+          imagePrompt: SEED_PROMPTS[s.id]?.image,
+          videoPrompt: SEED_PROMPTS[s.id]?.video,
+          videoModel: SEED_PROMPTS[s.id]?.videoModel,
+        }));
+        setItems(staticItems);
+        setLinks(SEED_REF_LINKS);
+        setPromptCard(staticItems.find((i) => i.generated)?.id ?? null);
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      try {
+        const [rows, conns] = await Promise.all([
+          listBoardItems(supabase, projectId),
+          listConnections(supabase, projectId),
+        ]);
+        if (!active) return;
+        setItems(rows);
+        setLinks(conns);
+        const firstGen = rows.find((i) => i.generated);
+        setPromptCard(firstGen?.id ?? null);
+      } catch (err) {
+        console.error("load board", err);
+      } finally {
+        if (active) setLoading(false);
+      }
+    }
+    load();
+    return () => {
+      active = false;
+    };
+  }, [supabase, projectId]);
 
   const openCardItem = items.find((i) => i.id === promptCard);
 
@@ -50,7 +115,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
               letterSpacing: 1,
             }}
           >
-            REFERENCES \· 4
+            REFERENCES \· {items.filter((i) => i.isRef).length}
           </div>
           {items.filter((i) => i.isRef).map((i) => (
             <AssetRow
@@ -69,7 +134,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
               letterSpacing: 1,
             }}
           >
-            GENERATED \· 2
+            GENERATED \· {items.filter((i) => i.generated).length}
           </div>
           {items.filter((i) => i.generated).map((i) => (
             <AssetRow
@@ -258,6 +323,25 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
             GENERATED \· {mode.toUpperCase()}
           </div>
 
+          {loading && projectId && (
+            <div
+              style={{
+                position: "absolute",
+                inset: 60,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "var(--lime)",
+                fontSize: 11,
+                fontFamily: "var(--f-mono)",
+                letterSpacing: 1.5,
+                animation: "lime-pulse 1.4s ease-in-out infinite",
+              }}
+            >
+              LOADING BOARD...
+            </div>
+          )}
+
           {items.map((it) => (
             <BoardItemCard
               key={it.id}
@@ -312,6 +396,7 @@ export default function ScreenBoard({ onShot }: { onShot: (n: number) => void })
         {openCardItem && (
           <PromptCard
             item={openCardItem}
+            allItems={items}
             mode={mode}
             onClose={() => setPromptCard(null)}
             onChangeMode={setMode}
@@ -331,7 +416,7 @@ function BoardItemCard({
   onShotClick,
   mode,
 }: {
-  item: BoardItem;
+  item: DBBoardItemUI;
   selected: boolean;
   promptOpen: boolean;
   onClick: () => void;
@@ -341,7 +426,8 @@ function BoardItemCard({
 }) {
   const img = shotURI({ id: item.id, kind: item.kind, tone: item.tone, w: 400, h: 500 });
   const isGen = !!item.generated;
-  const prompt = SEED_PROMPTS[item.id];
+  const fallback = fallbackPrompt(item.filename);
+  const usedInShot = fallback?.usedInShot;
   return (
     <div
       onClick={onClick}
@@ -385,7 +471,7 @@ function BoardItemCard({
       >
         {isGen ? (
           <>
-            <span style={{ color: "var(--lime)" }}>●</span> GEN \· {item.model?.split(" ")[0]}
+            <span style={{ color: "var(--lime)" }}>●</span> GEN \· {item.model?.split(" ")[0] ?? "Gen"}
           </>
         ) : (
           <>{item.tag?.toUpperCase() || "REF"}</>
@@ -436,11 +522,11 @@ function BoardItemCard({
         </>
       )}
 
-      {isGen && prompt?.usedInShot && (
+      {isGen && usedInShot && (
         <div
           onClick={(e) => {
             e.stopPropagation();
-            onShotClick(prompt.usedInShot!);
+            onShotClick(usedInShot);
           }}
           style={{
             position: "absolute",
@@ -456,7 +542,7 @@ function BoardItemCard({
             display: mode === "video" ? "none" : "inline-block",
           }}
         >
-          SHOT #{prompt.usedInShot}
+          SHOT #{usedInShot}
         </div>
       )}
 
@@ -494,7 +580,7 @@ function AssetRow({
   selected,
   onClick,
 }: {
-  item: BoardItem;
+  item: DBBoardItemUI;
   selected: boolean;
   onClick: () => void;
 }) {
@@ -552,18 +638,27 @@ function AssetRow({
 
 function PromptCard({
   item,
+  allItems,
   mode,
   onClose,
   onChangeMode,
 }: {
-  item: BoardItem;
+  item: DBBoardItemUI;
+  allItems: DBBoardItemUI[];
   mode: Mode;
   onClose: () => void;
   onChangeMode: (m: Mode) => void;
 }) {
-  const p = SEED_PROMPTS[item.id] || { image: "", video: "", videoModel: "" };
+  const fb = fallbackPrompt(item.filename);
+  const p = {
+    image: item.imagePrompt || fb?.image || "",
+    video: item.videoPrompt || fb?.video || "",
+    videoModel: item.videoModel || fb?.videoModel || "Seedance 2",
+  };
   const [tab, setTab] = useState<Mode>(mode);
   useEffect(() => setTab(mode), [mode]);
+
+  const refItems = allItems.filter((i) => i.isRef).slice(0, 3);
 
   return (
     <div
@@ -644,7 +739,7 @@ function PromptCard({
               color: "var(--bone)",
             }}
           >
-            {tab === "video" ? `VIDEO \· ${p.videoModel || "Seedance 2"}` : `IMAGE \· ${item.model}`}
+            {tab === "video" ? `VIDEO \· ${p.videoModel}` : `IMAGE \· ${item.model ?? "NanoBanana"}`}
           </div>
           {tab === "video" && (
             <div
@@ -701,27 +796,25 @@ function PromptCard({
         {tab === "image" ? (
           <>
             <Field label="Prompt">
-              <Textarea rows={6} value={p.image || ""} />
+              <Textarea rows={6} value={p.image} />
             </Field>
             <Field label="Negatives">
               <Input value="— plastic, studio lighting, hand model" />
             </Field>
             <Field label="Reference images" hint="Pinned to control composition.">
               <div style={{ display: "flex", gap: 6 }}>
-                {SEED_PRODUCT_IMAGES.filter((i) => i.isRef)
-                  .slice(0, 3)
-                  .map((r) => (
-                    <div
-                      key={r.id}
-                      style={{
-                        width: 44,
-                        height: 44,
-                        borderRadius: 6,
-                        background: `url("${shotURI({ id: r.id, kind: r.kind, tone: r.tone, w: 200, h: 200 })}") center/cover`,
-                        border: r.id === "img-1" ? "2px solid var(--lime)" : "1px solid var(--iron)",
-                      }}
-                    />
-                  ))}
+                {refItems.map((r, idx) => (
+                  <div
+                    key={r.id}
+                    style={{
+                      width: 44,
+                      height: 44,
+                      borderRadius: 6,
+                      background: `url("${shotURI({ id: r.id, kind: r.kind, tone: r.tone, w: 200, h: 200 })}") center/cover`,
+                      border: idx === 0 ? "2px solid var(--lime)" : "1px solid var(--iron)",
+                    }}
+                  />
+                ))}
                 <button
                   style={{
                     width: 44,
@@ -753,7 +846,7 @@ function PromptCard({
                     color: "var(--bone)",
                   }}
                 >
-                  <span>{item.model}</span>
+                  <span>{item.model ?? "NanoBanana Pro"}</span>
                   <I.ChevDown size={12} />
                 </div>
               </Field>
@@ -781,7 +874,7 @@ function PromptCard({
         ) : (
           <>
             <Field label="Motion prompt">
-              <Textarea rows={5} value={p.video || ""} />
+              <Textarea rows={5} value={p.video} />
             </Field>
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 10 }}>
               <Field label="Duration">
@@ -817,7 +910,7 @@ function PromptCard({
                     color: "var(--bone)",
                   }}
                 >
-                  <span>{p.videoModel || "Seedance 2"}</span>
+                  <span>{p.videoModel}</span>
                   <I.ChevDown size={12} />
                 </div>
               </Field>

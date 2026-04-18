@@ -16,6 +16,9 @@ import {
   listMyProjects,
   type DBProject,
 } from "@/lib/queries";
+import { seedDemoBoard } from "@/lib/queries-board";
+import { seedDemoShots } from "@/lib/queries-shots";
+import { seedDemoConcepts } from "@/lib/queries-concepts";
 import { useSession } from "@/lib/use-session";
 
 function useProjects() {
@@ -50,6 +53,18 @@ function useProjects() {
   return { rows, loading, error, refresh, supabase };
 }
 
+// Per-project idempotent seeding. Runs once per (browser session, project id)
+// so re-opening the same project doesn't re-hit the DB.
+async function ensureProjectSeeded(
+  supabase: ReturnType<typeof createClient>,
+  projectId: string
+): Promise<void> {
+  // Order matters — shots reference board_items for their ref_item_id.
+  await seedDemoBoard(supabase, projectId);
+  await seedDemoShots(supabase, projectId);
+  await seedDemoConcepts(supabase, projectId);
+}
+
 export default function App() {
   const [screen, setScreen] = useState<ScreenId>("home");
   const [project, setProject] = useState<Project>(DEFAULT_PROJECTS[0]);
@@ -60,6 +75,37 @@ export default function App() {
   const { rows, refresh, supabase } = useProjects();
 
   const projects: Project[] = useMemo(() => rows.map(dbToProject), [rows]);
+
+  // Treat only UUIDs as real DB project ids — anything shaped like the seed
+  // ("p1", "p2", ...) is a local demo project and has no matching DB row.
+  const isDbProject = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    project.id
+  );
+  const activeProjectId = isDbProject ? project.id : null;
+
+  // Seed demo data once per open of a real project.
+  const [seededIds, setSeededIds] = useState<Set<string>>(() => new Set());
+  useEffect(() => {
+    if (!activeProjectId) return;
+    if (seededIds.has(activeProjectId)) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await ensureProjectSeeded(supabase, activeProjectId);
+        if (cancelled) return;
+        setSeededIds((prev) => {
+          const next = new Set(prev);
+          next.add(activeProjectId);
+          return next;
+        });
+      } catch (err) {
+        console.error("ensureProjectSeeded", err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activeProjectId, seededIds, supabase]);
 
   useEffect(() => {
     const saved = typeof window !== "undefined" ? localStorage.getItem("ff-screen") : null;
@@ -120,17 +166,22 @@ export default function App() {
               onNewProject={() => setNewProjectOpen(true)}
             />
           )}
-          {screen === "concept" && <ScreenConcept onNext={() => setScreen("board")} />}
+          {screen === "concept" && (
+            <ScreenConcept onNext={() => setScreen("board")} projectId={activeProjectId} />
+          )}
           {screen === "board" && (
             <ScreenBoard
+              projectId={activeProjectId}
               onShot={(n) => {
                 setFocusShot(n);
                 setScreen("storyboard");
               }}
             />
           )}
-          {screen === "storyboard" && <ScreenStoryboard initialShot={focusShot} />}
-          {screen === "export" && <ScreenExport />}
+          {screen === "storyboard" && (
+            <ScreenStoryboard initialShot={focusShot} projectId={activeProjectId} />
+          )}
+          {screen === "export" && <ScreenExport projectId={activeProjectId} />}
           <ProjectSettings
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
