@@ -11,6 +11,7 @@ import {
 } from "@/lib/data";
 import { createClient } from "@/lib/supabase-client";
 import {
+  createBoardItemFromUpload,
   createConnection,
   listBoardItems,
   listConnections,
@@ -18,6 +19,8 @@ import {
   type DBBoardItemUI,
 } from "@/lib/queries-board";
 import { beginDrag, findBoardItemIdFromEl } from "@/lib/drag-utils";
+import UploadZone from "./upload-zone";
+import { generateShots } from "@/lib/ai-queries";
 
 type Mode = "image" | "video";
 
@@ -58,6 +61,9 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
   // Whether the user is hovering an item (drives the "Shift-drag to link" chip)
   const [hoveringItem, setHoveringItem] = useState(false);
   const canvasRef = useRef<HTMLDivElement | null>(null);
+  const [uploadOpen, setUploadOpen] = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -282,16 +288,71 @@ export default function ScreenBoard({ onShot, projectId }: Props) {
             />
           ))}
         </div>
-        <div style={{ padding: 10, borderTop: "1px solid var(--iron)" }}>
+        <div style={{ padding: 10, borderTop: "1px solid var(--iron)", display: "flex", flexDirection: "column", gap: 6 }}>
           <Btn
             size="sm"
             icon={<I.Upload size={12} />}
             style={{ width: "100%", justifyContent: "center" }}
+            onClick={() => setUploadOpen(true)}
+            disabled={!projectId}
           >
             Upload images
           </Btn>
+          <Btn
+            size="sm"
+            variant="primary"
+            icon={<I.Sparkles size={12} />}
+            style={{ width: "100%", justifyContent: "center" }}
+            disabled={!projectId || generating || items.filter((i) => i.isRef).length === 0}
+            onClick={async () => {
+              if (!projectId) return;
+              setGenerating(true);
+              setAiError(null);
+              try {
+                const ref = items.find((i) => i.id === selectedId && i.isRef) ?? items.find((i) => i.isRef);
+                await generateShots(projectId, {
+                  referenceItemId: ref?.id,
+                  count: 3,
+                  conceptTitle: "Weightless Ritual",
+                  conceptHook: "Cinematic product shot",
+                  productDescription: ref?.filename ?? "product",
+                });
+                await refetchItems();
+              } catch (err) {
+                setAiError(err instanceof Error ? err.message : "Generation failed");
+              } finally {
+                setGenerating(false);
+              }
+            }}
+          >
+            {generating ? "Generating…" : "Generate variants"}
+          </Btn>
+          {aiError && (
+            <div style={{ padding: "6px 8px", background: "rgba(255,90,95,0.08)", border: "1px solid rgba(255,90,95,0.3)", borderRadius: 4, fontSize: 10, color: "var(--coral)" }}>
+              {aiError}
+            </div>
+          )}
         </div>
       </div>
+
+      {uploadOpen && projectId && (
+        <UploadModal
+          projectId={projectId}
+          onClose={() => setUploadOpen(false)}
+          onUploaded={async (res) => {
+            try {
+              await createBoardItemFromUpload(supabase, projectId, {
+                filename: res.filename,
+                imageUrl: res.publicUrl,
+                storagePath: res.storagePath,
+              });
+              await refetchItems();
+            } catch (err) {
+              console.error("create board item from upload", err);
+            }
+          }}
+        />
+      )}
 
       {/* Canvas */}
       <div style={{ flex: 1, position: "relative", overflow: "hidden", background: "var(--obsidian)" }}>
@@ -635,7 +696,9 @@ function BoardItemCard({
   onHoverChange?: (hovering: boolean) => void;
   mode: Mode;
 }) {
-  const img = shotURI({ id: item.id, kind: item.kind, tone: item.tone, w: 400, h: 500 });
+  const img = item.imageUrl
+    ? item.imageUrl
+    : shotURI({ id: item.id, kind: item.kind, tone: item.tone, w: 400, h: 500 });
   const isGen = !!item.generated;
   const fallback = fallbackPrompt(item.filename);
   const usedInShot = fallback?.usedInShot;
@@ -1189,6 +1252,64 @@ function PromptCard({
         <div style={{ flex: 1 }} />
         <Btn size="sm" variant="ghost" icon={<I.Refresh size={12} />}>Variations</Btn>
         <Btn size="sm" variant="primary" icon={<I.Sparkles size={12} />}>Regenerate</Btn>
+      </div>
+    </div>
+  );
+}
+
+function UploadModal({
+  projectId,
+  onClose,
+  onUploaded,
+}: {
+  projectId: string;
+  onClose: () => void;
+  onUploaded: (res: { filename: string; publicUrl: string; storagePath: string }) => void | Promise<void>;
+}) {
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "absolute",
+        inset: 0,
+        background: "rgba(0,0,0,0.65)",
+        backdropFilter: "blur(4px)",
+        zIndex: 60,
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={(e) => e.stopPropagation()}
+        style={{
+          width: 540,
+          maxWidth: "90vw",
+          background: "var(--onyx)",
+          border: "1px solid var(--iron-2)",
+          borderRadius: 14,
+          padding: 22,
+          boxShadow: "0 40px 80px rgba(0,0,0,0.6)",
+        }}
+      >
+        <div style={{ display: "flex", alignItems: "center", marginBottom: 16 }}>
+          <div>
+            <div style={{ fontSize: 10, fontFamily: "var(--f-mono)", letterSpacing: 1.5, color: "var(--slate-2)" }}>
+              UPLOAD
+            </div>
+            <div style={{ fontSize: 17, fontWeight: 600, color: "var(--bone)", marginTop: 2 }}>
+              Add product photos
+            </div>
+          </div>
+          <div style={{ flex: 1 }} />
+          <button onClick={onClose} style={iconBtnStyle()}>
+            <I.X size={14} />
+          </button>
+        </div>
+        <UploadZone projectId={projectId} onUploaded={onUploaded} />
+        <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 16 }}>
+          <Btn variant="primary" onClick={onClose}>Done</Btn>
+        </div>
       </div>
     </div>
   );

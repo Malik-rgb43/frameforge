@@ -76,6 +76,8 @@ export interface BoardItemInput {
   video_model?: string | null;
   source_item_id?: string | null;
   status?: ShotStatus;
+  image_url?: string | null;
+  storage_path?: string | null;
 }
 
 export type BoardItemPatch = Partial<BoardItemInput>;
@@ -167,6 +169,8 @@ export async function createBoardItem(
     video_model: input.video_model ?? null,
     source_item_id: input.source_item_id ?? null,
     status: input.status ?? "ready",
+    image_url: input.image_url ?? null,
+    storage_path: input.storage_path ?? null,
   };
   const { data, error } = await client
     .from("board_items")
@@ -175,6 +179,28 @@ export async function createBoardItem(
     .single();
   if (error) throw error;
   return dbToBoardItem(data as DBBoardItem);
+}
+
+export async function createBoardItemFromUpload(
+  client: SupabaseClient,
+  projectId: string,
+  args: { filename: string; imageUrl: string; storagePath: string; x?: number; y?: number }
+): Promise<DBBoardItemUI> {
+  return createBoardItem(client, projectId, {
+    kind: "bottle",
+    tone: "amber",
+    filename: args.filename,
+    tag: "Ref",
+    canvas_x: args.x ?? 80 + Math.floor(Math.random() * 240),
+    canvas_y: args.y ?? 80 + Math.floor(Math.random() * 160),
+    width: 200,
+    height: 260,
+    is_ref: true,
+    is_generated: false,
+    image_url: args.imageUrl,
+    storage_path: args.storagePath,
+    status: "ready",
+  });
 }
 
 export async function updateBoardItem(
