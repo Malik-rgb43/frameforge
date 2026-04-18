@@ -1,5 +1,5 @@
 "use client";
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { I } from "./icons";
 import { Btn, Segmented, StatusDot, iconBtnStyle } from "./ui";
 import { shotURI, type Project, type ProjectStatus } from "@/lib/data";
@@ -9,10 +9,16 @@ type FilterValue = "all" | ProjectStatus;
 export default function ScreenHome({
   onOpenProject,
   onNewProject,
+  onArchiveProject,
+  onDuplicateProject,
+  onDeleteProject,
   projects: projectsProp,
 }: {
   onOpenProject: (p: Project) => void;
   onNewProject: () => void;
+  onArchiveProject?: (p: Project) => void | Promise<void>;
+  onDuplicateProject?: (p: Project) => void | Promise<void>;
+  onDeleteProject?: (p: Project) => void | Promise<void>;
   projects?: Project[];
 }) {
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -127,7 +133,13 @@ export default function ScreenHome({
             <NewProjectTile onClick={onNewProject} />
           </div>
         ) : (
-          <ProjectList projects={projects} onOpen={onOpenProject} />
+          <ProjectList
+            projects={projects}
+            onOpen={onOpenProject}
+            onArchive={onArchiveProject}
+            onDuplicate={onDuplicateProject}
+            onDelete={onDeleteProject}
+          />
         )}
       </div>
     </div>
@@ -294,7 +306,19 @@ function NewProjectTile({ onClick }: { onClick: () => void }) {
   );
 }
 
-function ProjectList({ projects, onOpen }: { projects: Project[]; onOpen: (p: Project) => void }) {
+function ProjectList({
+  projects,
+  onOpen,
+  onArchive,
+  onDuplicate,
+  onDelete,
+}: {
+  projects: Project[];
+  onOpen: (p: Project) => void;
+  onArchive?: (p: Project) => void | Promise<void>;
+  onDuplicate?: (p: Project) => void | Promise<void>;
+  onDelete?: (p: Project) => void | Promise<void>;
+}) {
   return (
     <div
       style={{
@@ -362,11 +386,145 @@ function ProjectList({ projects, onOpen }: { projects: Project[]; onOpen: (p: Pr
           <div style={{ color: "var(--ash-gray)", fontFamily: "var(--f-mono)", fontSize: 11 }}>{p.aspect}</div>
           <div style={{ color: "var(--ash-gray)" }}>{p.shots}</div>
           <div style={{ color: "var(--slate-2)", fontSize: 11 }}>{p.updated}</div>
-          <button style={{ ...iconBtnStyle(), width: 28, height: 28 }}>
-            <I.Dots size={14} />
-          </button>
+          <RowMenu
+            project={p}
+            onArchive={onArchive}
+            onDuplicate={onDuplicate}
+            onDelete={onDelete}
+          />
         </div>
       ))}
     </div>
+  );
+}
+
+// Small dots-menu for list rows — Archive / Duplicate / Delete.
+function RowMenu({
+  project,
+  onArchive,
+  onDuplicate,
+  onDelete,
+}: {
+  project: Project;
+  onArchive?: (p: Project) => void | Promise<void>;
+  onDuplicate?: (p: Project) => void | Promise<void>;
+  onDelete?: (p: Project) => void | Promise<void>;
+}) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [open]);
+
+  const anyWired = onArchive || onDuplicate || onDelete;
+
+  return (
+    <div ref={ref} style={{ position: "relative" }} onClick={(e) => e.stopPropagation()}>
+      <button
+        onClick={(e) => {
+          e.stopPropagation();
+          if (anyWired) setOpen((v) => !v);
+        }}
+        style={{ ...iconBtnStyle(), width: 28, height: 28, opacity: anyWired ? 1 : 0.5 }}
+        title="Project actions"
+      >
+        <I.Dots size={14} />
+      </button>
+      {open && (
+        <div
+          style={{
+            position: "absolute",
+            right: 0,
+            top: 32,
+            minWidth: 160,
+            background: "var(--onyx)",
+            border: "1px solid var(--iron-2)",
+            borderRadius: 8,
+            boxShadow: "0 20px 40px rgba(0,0,0,0.5)",
+            padding: 4,
+            zIndex: 50,
+          }}
+        >
+          {onDuplicate && (
+            <RowMenuItem
+              icon={<I.Copy size={13} />}
+              onClick={() => {
+                setOpen(false);
+                onDuplicate(project);
+              }}
+            >
+              Duplicate
+            </RowMenuItem>
+          )}
+          {onArchive && (
+            <RowMenuItem
+              icon={<I.Folder size={13} />}
+              onClick={() => {
+                setOpen(false);
+                onArchive(project);
+              }}
+            >
+              Archive
+            </RowMenuItem>
+          )}
+          {onDelete && (
+            <RowMenuItem
+              danger
+              icon={<I.Trash size={13} />}
+              onClick={() => {
+                setOpen(false);
+                onDelete(project);
+              }}
+            >
+              Delete
+            </RowMenuItem>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RowMenuItem({
+  children,
+  onClick,
+  icon,
+  danger,
+}: {
+  children: React.ReactNode;
+  onClick: () => void;
+  icon?: React.ReactNode;
+  danger?: boolean;
+}) {
+  return (
+    <button
+      onClick={onClick}
+      style={{
+        width: "100%",
+        height: 30,
+        padding: "0 10px",
+        background: "transparent",
+        border: "none",
+        borderRadius: 6,
+        color: danger ? "var(--coral)" : "var(--bone)",
+        fontSize: 12,
+        fontWeight: 500,
+        display: "inline-flex",
+        alignItems: "center",
+        gap: 8,
+        cursor: "pointer",
+        textAlign: "left",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.background = "rgba(255,255,255,0.04)")}
+      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+    >
+      {icon}
+      <span>{children}</span>
+    </button>
   );
 }

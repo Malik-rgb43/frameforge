@@ -25,6 +25,14 @@ export interface DBProject {
   shot_count: number | null;
   created_at: string;
   updated_at: string;
+  // Optional columns — added via later migrations. Use optional chaining
+  // on reads; older deployments may not have them.
+  brand_logo_url?: string | null;
+  default_image_model?: string | null;
+  export_format?: string | null;
+  export_burn_subtitles?: boolean | null;
+  export_editor_pack?: boolean | null;
+  export_watermark?: boolean | null;
 }
 
 export interface CreateProjectInput {
@@ -50,6 +58,12 @@ export type ProjectPatch = Partial<
     | "concept_hook"
     | "concept_palette"
     | "shot_count"
+    | "brand_logo_url"
+    | "default_image_model"
+    | "export_format"
+    | "export_burn_subtitles"
+    | "export_editor_pack"
+    | "export_watermark"
   >
 >;
 
@@ -145,6 +159,31 @@ export async function duplicateProject(
     hero_kind: existing.hero_kind ?? undefined,
     hero_tone: existing.hero_tone ?? undefined,
   });
+}
+
+// Thin convenience wrapper for brand-tab updates. Swallows the PostgREST
+// "column does not exist" error gracefully when optional columns (e.g.
+// brand_logo_url) haven't been migrated yet in a deployment.
+export async function updateProjectBrand(
+  client: SupabaseClient,
+  id: string,
+  patch: Partial<Pick<DBProject, "brand_logo_url" | "concept_palette">>
+): Promise<DBProject | null> {
+  try {
+    return await updateProject(client, id, patch);
+  } catch (err) {
+    const message =
+      err instanceof Error
+        ? err.message
+        : typeof err === "object" && err && "message" in err
+          ? String((err as { message: unknown }).message)
+          : String(err);
+    if (/column .* does not exist|schema cache/i.test(message)) {
+      console.warn("updateProjectBrand — optional column missing:", message);
+      return null;
+    }
+    throw err;
+  }
 }
 
 // ─────────────────────────────────────────────────────────

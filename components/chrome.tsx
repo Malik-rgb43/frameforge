@@ -41,11 +41,13 @@ export function AppHeader({
   projectName,
   onSettings,
   onBack,
+  onGenerate,
   breadcrumbs = [],
 }: {
   projectName?: string;
   onSettings?: () => void;
   onBack?: () => void;
+  onGenerate?: () => void;
   breadcrumbs?: string[];
 }) {
   return (
@@ -164,6 +166,8 @@ export function AppHeader({
         <I.Settings size={14} />
       </button>
       <button
+        onClick={onGenerate}
+        disabled={!onGenerate}
         style={{
           height: 30,
           padding: "0 14px",
@@ -173,7 +177,8 @@ export function AppHeader({
           borderRadius: 6,
           fontSize: 12,
           fontWeight: 600,
-          cursor: "pointer",
+          cursor: onGenerate ? "pointer" : "not-allowed",
+          opacity: onGenerate ? 1 : 0.5,
           display: "inline-flex",
           alignItems: "center",
           gap: 6,

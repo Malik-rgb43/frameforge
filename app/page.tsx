@@ -170,6 +170,15 @@ export default function App() {
               setProject(null);
             }}
             onSettings={() => project && setSettingsOpen(true)}
+            onGenerate={
+              project
+                ? () => {
+                    // Jump to Board. The Board's own PromptCard "Generate"
+                    // buttons trigger the actual generateShots() call.
+                    if (effectiveScreen !== "board") setScreen("board");
+                  }
+                : undefined
+            }
           />
           {effectiveScreen === "home" && (
             <ScreenHome
@@ -179,6 +188,41 @@ export default function App() {
                 setScreen("board");
               }}
               onNewProject={() => setNewProjectOpen(true)}
+              onArchiveProject={async (p) => {
+                try {
+                  const { updateProject } = await import("@/lib/queries");
+                  await updateProject(supabase, p.id, { status: "archived" });
+                  refresh();
+                } catch (e) {
+                  console.error("archive failed", e);
+                }
+              }}
+              onDuplicateProject={async (p) => {
+                try {
+                  const { duplicateProject, dbToProject } = await import("@/lib/queries");
+                  const row = await duplicateProject(supabase, p.id);
+                  await refresh();
+                  setProject(dbToProject(row));
+                  setScreen("concept");
+                } catch (e) {
+                  console.error("duplicate failed", e);
+                }
+              }}
+              onDeleteProject={async (p) => {
+                if (typeof window !== "undefined") {
+                  const typed = window.prompt(
+                    `Type the project name to confirm delete:\n"${p.name}"`
+                  );
+                  if (typed !== p.name) return;
+                }
+                try {
+                  const { deleteProject } = await import("@/lib/queries");
+                  await deleteProject(supabase, p.id);
+                  refresh();
+                } catch (e) {
+                  console.error("delete failed", e);
+                }
+              }}
             />
           )}
           {effectiveScreen === "concept" && project && (
@@ -201,6 +245,20 @@ export default function App() {
             open={settingsOpen && !!project}
             onClose={() => setSettingsOpen(false)}
             project={project}
+            onProjectChanged={(patch) => {
+              setProject((prev) => (prev ? { ...prev, ...patch } : prev));
+              refresh();
+            }}
+            onProjectDeleted={() => {
+              setProject(null);
+              setScreen("home");
+              refresh();
+            }}
+            onDuplicated={(newP) => {
+              setProject(newP);
+              setScreen("concept");
+              refresh();
+            }}
           />
         </div>
       </div>
