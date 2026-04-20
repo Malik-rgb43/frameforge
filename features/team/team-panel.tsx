@@ -18,7 +18,7 @@ const MOCK_MEMBERS: TeamMember[] = [
   {
     id: "m_ori",
     name: "Ori M.",
-    email: "orimalik19@gmail.com",
+    email: "owner@example.com",
     role: "owner",
     online: true,
     color: "#FFB86B",

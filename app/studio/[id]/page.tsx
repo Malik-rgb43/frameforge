@@ -264,7 +264,10 @@ export default function StudioPage({ params }: { params: { id: string } }) {
           open={briefOpen}
           onClose={() => setBriefOpen(false)}
           project={project}
-          onSaved={(p) => setProject(p)}
+          onSaved={(p) => {
+            setProject(p);
+            try { sessionStorage.setItem("ff.active.project", JSON.stringify(p)); } catch {}
+          }}
         />
         <KeyboardHelp />
         <ShortcutsHandler

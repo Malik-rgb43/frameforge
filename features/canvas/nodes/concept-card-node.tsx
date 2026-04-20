@@ -23,7 +23,8 @@ function shotsFromDuration(sec: number): number {
   if (sec <= 9) return 4;
   if (sec <= 15) return 6;
   if (sec <= 30) return 10;
-  return Math.max(3, Math.round(sec / 3));
+  if (sec <= 45) return 14;
+  return 18;
 }
 
 function AspectIcon({ ratio, active }: { ratio: string; active: boolean }) {
@@ -242,7 +243,7 @@ export default function ConceptCardNode({
             <div className="flex items-center gap-1.5">
               {/* Duration segmented */}
               <div className="flex items-center rounded-lg overflow-hidden border border-border-subtle/50 bg-canvas/40">
-                {[6, 9, 15, 30].map((d) => (
+                {[6, 9, 15, 30, 45, 60].map((d) => (
                   <button
                     key={d}
                     onClick={() => {

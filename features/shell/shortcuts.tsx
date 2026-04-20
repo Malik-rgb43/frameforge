@@ -8,7 +8,7 @@ import {
   uploadImagesAsSources,
 } from "@/features/upload/upload-utils";
 import { getDataAdapter } from "@/lib/data-adapter";
-import type { NodeRow } from "@/lib/supabase/types";
+import type { NodeRow, NodeInput } from "@/lib/supabase/types";
 
 interface Props {
   onMagicFill?: () => void;
@@ -127,13 +127,13 @@ export default function ShortcutsHandler({
 async function duplicateNode(src: NodeRow) {
   const state = useCanvas.getState();
   const adapter = await getDataAdapter();
-  const input: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+  const input: NodeInput = {
     ...src,
     x: src.x + 40,
     y: src.y + 40,
     order_index: state.nodes.length,
     title: (src.title ?? "Copy") + " (copy)",
-  } as Omit<NodeRow, "id" | "created_at" | "updated_at">;
+  } as NodeInput;
   try {
     const saved = await adapter.createNode(input);
     state.upsertNode(saved);

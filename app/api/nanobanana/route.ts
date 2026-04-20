@@ -48,7 +48,7 @@ export async function POST(req: Request) {
     });
 
     // Fire-and-forget log
-    await logGeneration({
+    logGeneration({
       workspace_id: workspaceId ?? undefined,
       project_id: projectId ?? null,
       node_id: nodeId ?? null,
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown error";
-    await logGeneration({
+    logGeneration({
       workspace_id: workspaceId ?? undefined,
       project_id: body?.projectId ?? null,
       node_id: body?.nodeId ?? null,

@@ -14,6 +14,8 @@ import {
   Swords,
   Loader2,
   Save,
+  ImagePlus,
+  XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -72,6 +74,32 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    if (!files.length) return;
+    const existing = brief.product_images ?? [];
+    const toAdd = files.slice(0, 4 - existing.length);
+    Promise.all(
+      toAdd.map(
+        (f) =>
+          new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(f);
+          })
+      )
+    ).then((newUrls) => {
+      setField("product_images", [...existing, ...newUrls]);
+    });
+    e.target.value = "";
+  };
+
+  const removeProductImage = (idx: number) => {
+    const imgs = [...(brief.product_images ?? [])];
+    imgs.splice(idx, 1);
+    setField("product_images", imgs);
   };
 
   const completeness = briefCompleteness(brief);
@@ -157,6 +185,39 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
                     onChange={(v) => setField("productDescription", v)}
                     placeholder="What it is, what makes it different, the 1 thing it does best."
                   />
+                </Field>
+                <Field label="Product images (up to 4)">
+                  <div className="flex flex-wrap gap-2">
+                    {(brief.product_images ?? []).map((url, idx) => (
+                      <div key={idx} className="relative group w-16 h-20 rounded-lg overflow-hidden border border-border-subtle/60 bg-canvas/40 flex-shrink-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={url} alt="" className="w-full h-full object-cover" />
+                        <button
+                          onClick={() => removeProductImage(idx)}
+                          className="absolute top-0.5 right-0.5 opacity-0 group-hover:opacity-100 transition-opacity"
+                          title="Remove"
+                        >
+                          <XCircle className="w-4 h-4 text-white drop-shadow-md" />
+                        </button>
+                      </div>
+                    ))}
+                    {(brief.product_images ?? []).length < 4 && (
+                      <label className="w-16 h-20 rounded-lg border border-dashed border-border-subtle/60 bg-canvas/30 hover:bg-white/5 flex flex-col items-center justify-center gap-1 cursor-pointer transition-colors flex-shrink-0">
+                        <ImagePlus className="w-4 h-4 text-text-muted" />
+                        <span className="text-[9px] text-text-muted text-center leading-tight px-1">Add photo</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          className="hidden"
+                          onChange={handleProductImageUpload}
+                        />
+                      </label>
+                    )}
+                  </div>
+                  <p className="text-[9px] text-text-muted mt-1">
+                    Used as visual ref in every generation — add your hero product shots.
+                  </p>
                 </Field>
               </Section>
 

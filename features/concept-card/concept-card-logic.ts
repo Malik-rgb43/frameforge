@@ -5,11 +5,29 @@ import { internalFetch } from "@/lib/api";
 
 import { useCanvas } from "@/features/canvas/store";
 import { getDataAdapter } from "@/lib/data-adapter";
-import type { EdgeRow, NodeGroup, NodeRow, Project } from "@/lib/supabase/types";
+import type { EdgeRow, NodeGroup, NodeRow, NodeInput, Project } from "@/lib/supabase/types";
 import {
   briefAsContext,
   type ProjectBrief,
 } from "@/features/brief/brief-types";
+
+async function getBriefProductImages(): Promise<Array<{base64: string; mimeType: string}>> {
+  try {
+    if (typeof window === "undefined") return [];
+    const cached = sessionStorage.getItem("ff.active.project");
+    if (!cached) return [];
+    const p = JSON.parse(cached) as import("@/lib/supabase/types").Project;
+    const brief = p.brief as unknown as import("@/features/brief/brief-types").ProjectBrief | null;
+    const productImages = brief?.product_images ?? [];
+    return productImages.slice(0, 2).map((dataUrl) => {
+      const [header, base64] = dataUrl.split(",");
+      const mimeType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg";
+      return { base64, mimeType };
+    });
+  } catch {
+    return [];
+  }
+}
 
 async function getProjectBriefContext(): Promise<string> {
   const state = useCanvas.getState();
@@ -59,7 +77,7 @@ export async function createConceptCard(position?: {
 
   const pos = position ?? findFreeSpot(state.nodes);
   const now = new Date().toISOString();
-  const input: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+  const input: NodeInput = {
     board_id: state.boardId,
     group_id: null,
     type: "concept_card",
@@ -375,8 +393,11 @@ export async function generateWorkflow(
   }
   state.upsertGroup(group);
 
-  // Collect ref images from connected nodes
-  const refImages = await getConnectedRefImages(conceptCardId);
+  // Collect ref images: connected canvas nodes + product images from the brief
+  const canvasRefs = await getConnectedRefImages(conceptCardId);
+  const briefProductRefs = await getBriefProductImages();
+  // Brief product images first (highest priority slot), then canvas mood refs
+  const refImages = [...briefProductRefs, ...canvasRefs].slice(0, 4);
 
   // 2. Ask Gemini for a shot list first, then generate the concept brief using the real shots.
   // Brief depends on shots for accurate per-shot referencing, so shots must resolve first.
@@ -396,7 +417,7 @@ export async function generateWorkflow(
   const createdShots: NodeRow[] = [];
   for (let i = 0; i < shots.length; i++) {
     const spec = shots[i];
-    const shotInput: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+    const shotInput: NodeInput = {
       board_id: state.boardId,
       group_id: group.id,
       type: i === 0 ? "shot" : "continuation",

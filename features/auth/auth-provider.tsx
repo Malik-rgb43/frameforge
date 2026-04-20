@@ -31,7 +31,7 @@ async function ensureWorkspace(userId: string): Promise<string | null> {
   // Create workspace for this user
   const { data: ws, error: wsErr } = await sb
     .from("workspaces")
-    .insert({ name: "My Workspace", plan: "pro" })
+    .insert({ name: "My Workspace", owner_user_id: userId })
     .select("id")
     .single();
 

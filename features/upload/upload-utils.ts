@@ -1,5 +1,5 @@
 import { useCanvas } from "@/features/canvas/store";
-import type { NodeRow } from "@/lib/supabase/types";
+import type { NodeRow, NodeInput } from "@/lib/supabase/types";
 import { getDataAdapter } from "@/lib/data-adapter";
 
 const uid = () =>
@@ -39,7 +39,7 @@ export async function uploadImagesAsSources(files: File[]): Promise<NodeRow[]> {
   for (const file of files) {
     if (!file.type.startsWith("image/")) continue;
     const dataUrl = await fileToDataUrl(file);
-    const input: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+    const input: NodeInput = {
       board_id: state.boardId,
       group_id: null,
       type: "source",
@@ -66,6 +66,9 @@ export async function uploadImagesAsSources(files: File[]): Promise<NodeRow[]> {
       const local: NodeRow = {
         ...input,
         id: uid(),
+        animation_prompt: null,
+        animation_model_hint: null,
+        used_ref_ids: null,
         created_at: now,
         updated_at: now,
       };

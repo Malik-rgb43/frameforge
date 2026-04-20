@@ -130,10 +130,16 @@ export const useCanvas = create<CanvasState>()(
         return { nodes: next };
       }),
 
-    updateNode: (id, patch) =>
+    updateNode: (id, patch) => {
       set((s) => ({
         nodes: s.nodes.map((n) => (n.id === id ? { ...n, ...patch } : n)),
-      })),
+      }));
+      import("@/lib/data-adapter").then(({ getDataAdapter }) =>
+        Promise.resolve(getDataAdapter()).then((adapter) =>
+          adapter.updateNode(id, patch).catch(() => {})
+        )
+      );
+    },
 
     removeNode: (id) =>
       set((s) => ({
@@ -212,8 +218,14 @@ export const useCanvas = create<CanvasState>()(
       );
     },
 
-    removeEdge: (id) =>
-      set((s) => ({ edges: s.edges.filter((e) => e.id !== id) })),
+    removeEdge: (id) => {
+      set((s) => ({ edges: s.edges.filter((e) => e.id !== id) }));
+      import("@/lib/data-adapter").then(({ getDataAdapter }) =>
+        Promise.resolve(getDataAdapter()).then((adapter) =>
+          adapter.deleteEdge(id).catch(() => {})
+        )
+      );
+    },
 
     setSelectedIds: (ids) => set({ selectedNodeIds: ids }),
 

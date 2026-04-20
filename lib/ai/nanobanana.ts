@@ -57,7 +57,7 @@ export async function callNanoBanana(
     { text: prompt },
   ];
   if (opts.refImages) {
-    for (const ref of opts.refImages.slice(0, 3)) {
+    for (const ref of opts.refImages.slice(0, 4)) {
       parts.push({
         inlineData: { data: ref.base64, mimeType: ref.mimeType },
       });

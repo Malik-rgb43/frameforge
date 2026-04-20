@@ -67,8 +67,10 @@ export async function createContinuation(
     quality_score: null,
     metadata: {
       parent_shot_id: parentNodeId,
-      animation_prompt: null,
     },
+    animation_prompt: null,
+    animation_model_hint: null,
+    used_ref_ids: null,
     created_at: now,
     updated_at: now,
   };

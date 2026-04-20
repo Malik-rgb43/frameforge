@@ -4,7 +4,8 @@ import { internalFetch } from "@/lib/api";
 
 import { useCanvas } from "@/features/canvas/store";
 import { getDataAdapter } from "@/lib/data-adapter";
-import type { EdgeRow, NodeRow } from "@/lib/supabase/types";
+import { briefAsContext, EMPTY_BRIEF, type ProjectBrief } from "@/features/brief/brief-types";
+import type { EdgeRow, NodeRow, NodeInput } from "@/lib/supabase/types";
 
 const MOCK_IMAGES = [
   "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=480&h=640&fit=crop",
@@ -47,6 +48,38 @@ function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 
+function getBriefTextContext(): string {
+  try {
+    if (typeof window === "undefined") return "";
+    const cached = sessionStorage.getItem("ff.active.project");
+    if (!cached) return "";
+    const p = JSON.parse(cached) as import("@/lib/supabase/types").Project;
+    const brief = (p.brief as unknown as ProjectBrief) ?? null;
+    if (!brief) return "";
+    return briefAsContext({ ...EMPTY_BRIEF, ...brief });
+  } catch {
+    return "";
+  }
+}
+
+async function getBriefProductImages(): Promise<Array<{ base64: string; mimeType: string }>> {
+  try {
+    if (typeof window === "undefined") return [];
+    const cached = sessionStorage.getItem("ff.active.project");
+    if (!cached) return [];
+    const p = JSON.parse(cached) as import("@/lib/supabase/types").Project;
+    const brief = p.brief as unknown as import("@/features/brief/brief-types").ProjectBrief | null;
+    const productImages = brief?.product_images ?? [];
+    return productImages.slice(0, 2).map((dataUrl) => {
+      const [header, base64] = dataUrl.split(",");
+      const mimeType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg";
+      return { base64, mimeType };
+    });
+  } catch {
+    return [];
+  }
+}
+
 // Find a free spot on the board for a new node
 function findFreeSpot(nodes: NodeRow[]): { x: number; y: number } {
   // Place below the lowest existing node, offset by 40px
@@ -75,7 +108,9 @@ export async function generateFromPrompt(opts: GenerateOptions): Promise<NodeRow
   const { x, y } = findFreeSpot(nodes);
   const now = new Date().toISOString();
 
-  const enhancedPrompt = `${prompt}
+  const briefContext = getBriefTextContext();
+
+  const enhancedPrompt = `${briefContext ? `${briefContext}\n\n` : ""}${prompt}
 
 Production specs:
 - Photorealistic cinematic, 35mm film feel, subtle grain, analog texture
@@ -88,7 +123,7 @@ ${refNodeIds.length > 0 ? `- ${refNodeIds.length} reference images attached for 
   const adapter = await getDataAdapter();
 
   // Persist placeholder node
-  const placeholderInput: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+  const placeholderInput: NodeInput = {
     board_id: boardId,
     group_id: null,
     type: isContinuation ? "continuation" : "shot",
@@ -104,7 +139,8 @@ ${refNodeIds.length > 0 ? `- ${refNodeIds.length} reference images attached for 
     title: prompt.slice(0, 40),
     status: "generating",
     quality_score: null,
-    metadata: { used_ref_ids: [...refNodeIds] },
+    used_ref_ids: [...refNodeIds],
+    metadata: {},
   };
 
   let placeholder: NodeRow;
@@ -141,7 +177,8 @@ ${refNodeIds.length > 0 ? `- ${refNodeIds.length} reference images attached for 
     }
   }
 
-  // Convert up to 3 refs to base64 for NanoBanana slots
+  // Brief product images first (highest priority), then canvas mood refs
+  const briefProductRefs = await getBriefProductImages();
   const refImageDataList = await Promise.all(
     refNodeIds
       .slice(0, 3)
@@ -149,9 +186,10 @@ ${refNodeIds.length > 0 ? `- ${refNodeIds.length} reference images attached for 
       .filter((u): u is string => !!u)
       .map((u) => urlToBase64(u))
   );
-  const refImages = refImageDataList.filter(
+  const canvasRefs = refImageDataList.filter(
     (r): r is { base64: string; mimeType: string } => !!r
   );
+  const refImages = [...briefProductRefs, ...canvasRefs].slice(0, 4);
 
   // Try real API first, fall back to mock only if API key not configured (503).
   try {

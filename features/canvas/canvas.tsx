@@ -48,7 +48,7 @@ function toRfNodes(rows: NodeRow[]): Node[] {
     type: r.type,
     position: { x: r.x, y: r.y },
     data: { row: r },
-    draggable: r.type !== "concept_card",
+    draggable: true,
     selectable: true,
     style: { width: r.w, height: r.h },
   }));

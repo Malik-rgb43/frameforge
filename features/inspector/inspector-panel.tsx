@@ -312,13 +312,16 @@ Write the motion prompt. JSON only.`;
         }),
       });
 
-      const persistAnimMetadata = (meta: Record<string, unknown>) => {
+      const persistAnimMetadata = (animPrompt: string, modelHint: string) => {
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const merged = { ...(node.metadata as Record<string, unknown>), ...meta } as any;
-        upsertNode({ ...node, metadata: merged });
+        const merged = { ...(node.metadata as Record<string, unknown>), animation_prompt: animPrompt, animation_model_hint: modelHint } as any;
+        upsertNode({ ...node, metadata: merged, animation_prompt: animPrompt, animation_model_hint: modelHint });
         void Promise.resolve(getDataAdapter()).then((adapter) =>
-          adapter.updateNode(node.id, { metadata: merged })
-            .catch((err) => console.error("updateNode anim failed", err))
+          adapter.updateNode(node.id, {
+            animation_prompt: animPrompt,
+            animation_model_hint: modelHint,
+            metadata: merged,
+          }).catch((err) => console.error("updateNode anim failed", err))
         );
       };
 
@@ -326,16 +329,13 @@ Write the motion prompt. JSON only.`;
         const { data } = (await res.json()) as {
           data: { motionPrompt?: string; modelHint?: string };
         };
-        persistAnimMetadata({
-          animation_prompt: data?.motionPrompt ?? "",
-          animation_model_hint: data?.modelHint ?? model,
-        });
+        persistAnimMetadata(data?.motionPrompt ?? "", data?.modelHint ?? model);
       } else {
         // Fallback deterministic builder
-        persistAnimMetadata({
-          animation_prompt: `Slow dolly-in at 4px/frame with subtle rack-focus from foreground to hero. Subject action peaks in the middle third. End on a still locked frame ready for a clean cut to the next shot.`,
-          animation_model_hint: model,
-        });
+        persistAnimMetadata(
+          `Slow dolly-in at 4px/frame with subtle rack-focus from foreground to hero. Subject action peaks in the middle third. End on a still locked frame ready for a clean cut to the next shot.`,
+          model
+        );
       }
     } catch (err) {
       console.error("motion prompt gen failed", err);

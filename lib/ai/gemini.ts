@@ -64,7 +64,7 @@ export async function callGemini<T>(
     contents: [{ role: "user", parts: userParts }],
     config: {
       systemInstruction: systemPrompt,
-      temperature: opts.temperature ?? 0.9,
+      temperature: opts.temperature ?? 1.0,
       responseMimeType: opts.responseMimeType ?? "application/json",
     },
   });

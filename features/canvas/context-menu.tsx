@@ -25,7 +25,7 @@ import {
   ungroupSelectedNodes,
 } from "@/features/concept-card/concept-card-logic";
 import { getDataAdapter } from "@/lib/data-adapter";
-import type { NodeRow } from "@/lib/supabase/types";
+import type { NodeRow, NodeInput } from "@/lib/supabase/types";
 
 const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -135,13 +135,13 @@ export default function CanvasContextMenu({ onEnhance, onMagicExpand }: Props) {
   const duplicate = async () => {
     if (!node) return;
     const adapter = await getDataAdapter();
-    const input: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+    const input: NodeInput = {
       ...node,
       x: node.x + 40,
       y: node.y + 40,
       order_index: nodes.length,
       title: (node.title ?? "Copy") + " (copy)",
-    } as Omit<NodeRow, "id" | "created_at" | "updated_at">;
+    } as NodeInput;
     try {
       const saved = await adapter.createNode(input);
       useCanvas.getState().upsertNode(saved);
@@ -202,7 +202,7 @@ export default function CanvasContextMenu({ onEnhance, onMagicExpand }: Props) {
                   const state = useCanvas.getState();
                   const boardId = state.boardId;
                   if (!boardId) return;
-                  const input: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+                  const input: NodeInput = {
                     board_id: boardId,
                     group_id: null,
                     type: "budget_tracker" as NodeRow["type"],
@@ -364,15 +364,12 @@ export default function CanvasContextMenu({ onEnhance, onMagicExpand }: Props) {
                     const n = nodes.find((x) => x.id === id);
                     if (!n) continue;
                     try {
-                      const input: Omit<
-                        NodeRow,
-                        "id" | "created_at" | "updated_at"
-                      > = {
+                      const input: NodeInput = {
                         ...n,
                         x: n.x + 40,
                         y: n.y + 40,
                         order_index: nodes.length,
-                      } as Omit<NodeRow, "id" | "created_at" | "updated_at">;
+                      } as NodeInput;
                       const saved = await adapter.createNode(input);
                       useCanvas.getState().upsertNode(saved);
                     } catch {

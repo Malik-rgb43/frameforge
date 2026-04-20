@@ -4,7 +4,7 @@ import { internalFetch } from "@/lib/api";
 
 import { useCanvas } from "@/features/canvas/store";
 import { getDataAdapter } from "@/lib/data-adapter";
-import type { NodeRow } from "@/lib/supabase/types";
+import type { NodeRow, NodeInput } from "@/lib/supabase/types";
 
 export type EnhancementPreset =
   | "polish" // default — subtle sharpening + color grade
@@ -100,7 +100,7 @@ Output: photorealistic, 35mm film feel, cinematic commercial polish.`;
       x: source.x + source.w + 24,
       y: source.y,
     };
-    const input: Omit<NodeRow, "id" | "created_at" | "updated_at"> = {
+    const input: NodeInput = {
       board_id: source.board_id,
       group_id: source.group_id ?? null,
       type: source.type,

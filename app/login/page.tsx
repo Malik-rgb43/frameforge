@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
+  const [confirmSent, setConfirmSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,12 +22,19 @@ export default function LoginPage() {
       if (mode === "sign_in") {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
+        router.push("/");
+        router.refresh();
       } else {
-        const { error } = await sb.auth.signUp({ email, password });
+        const { data, error } = await sb.auth.signUp({ email, password });
         if (error) throw error;
+        if (!data.session) {
+          // Email confirmation required — session not ready yet
+          setConfirmSent(true);
+          return;
+        }
+        router.push("/");
+        router.refresh();
       }
-      router.push("/");
-      router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -55,6 +63,23 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-2xl bg-panel border border-border-subtle shadow-[0_8px_40px_rgba(0,0,0,0.4)] p-6">
+          {confirmSent ? (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <div className="w-10 h-10 rounded-full bg-status-success/15 border border-status-success/30 flex items-center justify-center text-lg">✉️</div>
+              <h2 className="text-sm font-semibold text-text-primary">Check your email</h2>
+              <p className="text-xs text-text-muted leading-relaxed">
+                We sent a confirmation link to <span className="text-text-secondary">{email}</span>.<br />
+                Click it to activate your account.
+              </p>
+              <button
+                onClick={() => { setConfirmSent(false); setMode("sign_in"); setError(null); }}
+                className="mt-2 text-xs text-accent-warm hover:underline"
+              >
+                Back to sign in
+              </button>
+            </div>
+          ) : (
+          <>
           <h1 className="text-base font-semibold mb-1">
             {mode === "sign_in" ? "Sign in" : "Create account"}
           </h1>
@@ -112,6 +137,8 @@ export default function LoginPage() {
               {mode === "sign_in" ? "Sign up" : "Sign in"}
             </button>
           </p>
+          </>
+          )}
         </div>
       </div>
     </main>

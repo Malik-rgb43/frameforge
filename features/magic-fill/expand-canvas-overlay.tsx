@@ -187,6 +187,9 @@ export default function ExpandCanvasOverlay({ open, onClose }: Props) {
       status: "generating",
       quality_score: null,
       metadata: {} as import("@/lib/supabase/types").Json,
+      animation_prompt: null,
+      animation_model_hint: null,
+      used_ref_ids: null,
       created_at: now,
       updated_at: now,
     };

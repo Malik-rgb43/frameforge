@@ -48,7 +48,7 @@ export async function POST(req: Request) {
       images,
     });
 
-    await logGeneration({
+    logGeneration({
       workspace_id: workspaceId ?? undefined,
       project_id: projectId ?? null,
       action: action ?? "text.generate",
@@ -63,7 +63,7 @@ export async function POST(req: Request) {
     return NextResponse.json(result);
   } catch (err) {
     const msg = err instanceof Error ? err.message : "unknown error";
-    await logGeneration({
+    logGeneration({
       workspace_id: workspaceId ?? undefined,
       project_id: body?.projectId ?? null,
       action: body?.action ?? "text.generate",

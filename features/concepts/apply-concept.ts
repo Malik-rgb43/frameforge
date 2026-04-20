@@ -42,6 +42,9 @@ export async function applyConceptToBoard(concept: ConceptUI): Promise<void> {
     status: "ready" as const,
     quality_score: null,
     metadata: { fromConcept: concept.id, kind: "moodboard" },
+    animation_prompt: null,
+    animation_model_hint: null,
+    used_ref_ids: null,
     created_at: now,
     updated_at: now,
   }));
@@ -73,8 +76,10 @@ export async function applyConceptToBoard(concept: ConceptUI): Promise<void> {
       metadata: {
         fromConcept: concept.id,
         purpose,
-        animation_prompt: null,
       },
+      animation_prompt: null,
+      animation_model_hint: null,
+      used_ref_ids: null,
       created_at: now,
       updated_at: now,
     });

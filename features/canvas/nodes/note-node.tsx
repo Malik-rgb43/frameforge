@@ -1,13 +1,31 @@
 "use client";
+import { useState, useRef } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import type { NodeRow } from "@/lib/supabase/types";
+import { useCanvas } from "../store";
 
 export default function NoteNode({
   data,
   selected,
 }: NodeProps<{ row: NodeRow }>) {
   const { row } = data;
-  const text = ((row.metadata as { text?: string } | null)?.text ?? "").toString();
+  const updateNode = useCanvas((s) => s.updateNode);
+  const [text, setText] = useState(
+    ((row.metadata as { text?: string } | null)?.text ?? "").toString()
+  );
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const handleChange = (val: string) => {
+    setText(val);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => {
+      const latestMeta = (useCanvas.getState().nodes.find((n) => n.id === row.id)?.metadata ?? {}) as Record<string, unknown>;
+      updateNode(row.id, {
+        metadata: { ...latestMeta, text: val } as import("@/lib/supabase/types").Json,
+        updated_at: new Date().toISOString(),
+      });
+    }, 600);
+  };
 
   return (
     <div
@@ -18,9 +36,14 @@ export default function NoteNode({
       }`}
       style={{ width: row.w, minHeight: row.h }}
     >
-      <div className="text-xs text-yellow-200/90 whitespace-pre-wrap" dir="auto">
-        {text || "הקלד הערה..."}
-      </div>
+      <textarea
+        value={text}
+        onChange={(e) => handleChange(e.target.value)}
+        placeholder="Type a note…"
+        dir="auto"
+        className="nodrag w-full h-full bg-transparent text-xs text-yellow-200/90 placeholder:text-yellow-200/30 resize-none focus:outline-none leading-relaxed"
+        style={{ minHeight: (row.h ?? 80) - 24 }}
+      />
       <Handle
         type="target"
         position={Position.Top}

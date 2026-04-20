@@ -35,6 +35,9 @@ export interface ProjectBrief {
 
   // Competitors (for differentiation)
   competitors?: string[];
+
+  // Product hero images — uploaded once, used as ref in every generation
+  product_images?: string[];
 }
 
 export const EMPTY_BRIEF: ProjectBrief = {

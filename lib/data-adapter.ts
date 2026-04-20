@@ -4,7 +4,9 @@
 import type {
   Board,
   EdgeRow,
+  EdgeInput,
   NodeRow,
+  NodeInput,
   Project,
   Workspace,
 } from "./supabase/types";
@@ -34,10 +36,10 @@ export interface DataAdapter {
   listBoards(projectId: string): Promise<Board[]>;
   listNodes(boardId: string): Promise<NodeRow[]>;
   listEdges(boardId: string): Promise<EdgeRow[]>;
-  createNode(input: Omit<NodeRow, "id" | "created_at" | "updated_at"> & { id?: string }): Promise<NodeRow>;
+  createNode(input: NodeInput): Promise<NodeRow>;
   updateNode(id: string, patch: Partial<NodeRow>): Promise<NodeRow>;
   deleteNode(id: string): Promise<void>;
-  createEdge(input: Omit<EdgeRow, "id" | "created_at"> & { id?: string }): Promise<EdgeRow>;
+  createEdge(input: EdgeInput): Promise<EdgeRow>;
   deleteEdge(id: string): Promise<void>;
 }
 
@@ -378,7 +380,7 @@ let cached: DataAdapter | Promise<DataAdapter> | null = null;
 
 export function getDataAdapter(): DataAdapter | Promise<DataAdapter> {
   if (cached) return cached;
-  const mode = process.env.NEXT_PUBLIC_DATA_ADAPTER ?? "mock";
+  const mode = (process.env.NEXT_PUBLIC_DATA_ADAPTER ?? "mock").trim();
   cached = mode === "supabase" ? makeSupabaseAdapter() : makeMockAdapter();
   return cached;
 }

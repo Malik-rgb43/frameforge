@@ -136,13 +136,23 @@ export type Database = {
           status: "pending" | "generating" | "ready" | "error";
           quality_score: number | null;
           metadata: Json | null;
+          animation_prompt: string | null;
+          animation_model_hint: string | null;
+          used_ref_ids: string[] | null;
           created_at: string;
           updated_at: string;
         };
         Insert: Omit<
           Database["public"]["Tables"]["nodes"]["Row"],
-          "id" | "created_at" | "updated_at"
-        > & { id?: string; created_at?: string; updated_at?: string };
+          "id" | "created_at" | "updated_at" | "animation_prompt" | "animation_model_hint" | "used_ref_ids"
+        > & {
+          id?: string;
+          created_at?: string;
+          updated_at?: string;
+          animation_prompt?: string | null;
+          animation_model_hint?: string | null;
+          used_ref_ids?: string[] | null;
+        };
         Update: Partial<Database["public"]["Tables"]["nodes"]["Insert"]>;
       };
       edges: {
@@ -279,7 +289,9 @@ export type Project = Database["public"]["Tables"]["projects"]["Row"];
 export type Board = Database["public"]["Tables"]["boards"]["Row"];
 export type NodeGroup = Database["public"]["Tables"]["node_groups"]["Row"];
 export type NodeRow = Database["public"]["Tables"]["nodes"]["Row"];
+export type NodeInput = Database["public"]["Tables"]["nodes"]["Insert"];
 export type EdgeRow = Database["public"]["Tables"]["edges"]["Row"];
+export type EdgeInput = Database["public"]["Tables"]["edges"]["Insert"];
 export type ConceptRow = Database["public"]["Tables"]["concepts"]["Row"];
 export type RefLibrary = Database["public"]["Tables"]["refs_library"]["Row"];
 export type PromptLibrary = Database["public"]["Tables"]["prompts_library"]["Row"];
