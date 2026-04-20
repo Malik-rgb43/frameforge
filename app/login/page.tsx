@@ -9,8 +9,6 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-  const [mode, setMode] = useState<"sign_in" | "sign_up">("sign_in");
-  const [confirmSent, setConfirmSent] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -19,22 +17,10 @@ export default function LoginPage() {
     const sb = createClient();
 
     try {
-      if (mode === "sign_in") {
-        const { error } = await sb.auth.signInWithPassword({ email, password });
-        if (error) throw error;
-        router.push("/");
-        router.refresh();
-      } else {
-        const { data, error } = await sb.auth.signUp({ email, password });
-        if (error) throw error;
-        if (!data.session) {
-          // Email confirmation required — session not ready yet
-          setConfirmSent(true);
-          return;
-        }
-        router.push("/");
-        router.refresh();
-      }
+      const { error } = await sb.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      router.push("/");
+      router.refresh();
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -63,31 +49,8 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-2xl bg-panel border border-border-subtle shadow-[0_8px_40px_rgba(0,0,0,0.4)] p-6">
-          {confirmSent ? (
-            <div className="flex flex-col items-center gap-3 py-4 text-center">
-              <div className="w-10 h-10 rounded-full bg-status-success/15 border border-status-success/30 flex items-center justify-center text-lg">✉️</div>
-              <h2 className="text-sm font-semibold text-text-primary">Check your email</h2>
-              <p className="text-xs text-text-muted leading-relaxed">
-                We sent a confirmation link to <span className="text-text-secondary">{email}</span>.<br />
-                Click it to activate your account.
-              </p>
-              <button
-                onClick={() => { setConfirmSent(false); setMode("sign_in"); setError(null); }}
-                className="mt-2 text-xs text-accent-warm hover:underline"
-              >
-                Back to sign in
-              </button>
-            </div>
-          ) : (
-          <>
-          <h1 className="text-base font-semibold mb-1">
-            {mode === "sign_in" ? "Sign in" : "Create account"}
-          </h1>
-          <p className="text-xs text-text-muted mb-5">
-            {mode === "sign_in"
-              ? "Welcome back to your creative studio."
-              : "Set up your FrameForge workspace."}
-          </p>
+          <h1 className="text-base font-semibold mb-1">Sign in</h1>
+          <p className="text-xs text-text-muted mb-5">Welcome back to your creative studio.</p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
@@ -124,21 +87,9 @@ export default function LoginPage() {
               disabled={loading}
               className="mt-1 h-9 rounded-lg bg-accent-warm text-canvas text-sm font-semibold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(255,184,107,0.25)] transition-all"
             >
-              {loading ? "Loading…" : mode === "sign_in" ? "Sign in" : "Create account"}
+              {loading ? "Signing in…" : "Sign in"}
             </button>
           </form>
-
-          <p className="mt-4 text-center text-xs text-text-muted">
-            {mode === "sign_in" ? "No account? " : "Already have an account? "}
-            <button
-              onClick={() => { setMode(mode === "sign_in" ? "sign_up" : "sign_in"); setError(null); }}
-              className="text-accent-warm hover:underline"
-            >
-              {mode === "sign_in" ? "Sign up" : "Sign in"}
-            </button>
-          </p>
-          </>
-          )}
         </div>
       </div>
     </main>
