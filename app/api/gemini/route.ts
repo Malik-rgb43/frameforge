@@ -34,7 +34,7 @@ export async function POST(req: Request) {
   try {
     body = await req.json();
     const { systemPrompt, userPrompt, model, temperature, responseMimeType, images, projectId, action } = body;
-    if (typeof systemPrompt !== "string" || typeof userPrompt !== "string") {
+    if (typeof systemPrompt !== "string" || systemPrompt.trim().length === 0 || typeof userPrompt !== "string" || userPrompt.trim().length === 0) {
       return NextResponse.json(
         { error: "systemPrompt and userPrompt required" },
         { status: 400 }

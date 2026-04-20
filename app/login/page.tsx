@@ -3,24 +3,36 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
+type Mode = "signin" | "signup";
+
 export default function LoginPage() {
   const router = useRouter();
+  const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccess(null);
     setLoading(true);
     const sb = createClient();
 
     try {
-      const { error } = await sb.auth.signInWithPassword({ email, password });
-      if (error) throw error;
-      router.push("/");
-      router.refresh();
+      if (mode === "signup") {
+        const { error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+        setSuccess("Account created — check your email to confirm, then sign in.");
+        setMode("signin");
+      } else {
+        const { error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        router.push("/");
+        router.refresh();
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Something went wrong");
     } finally {
@@ -29,9 +41,11 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="min-h-screen bg-canvas flex items-center justify-center p-4"
+    <main
+      className="min-h-screen bg-canvas flex items-center justify-center p-4"
       style={{
-        backgroundImage: "repeating-conic-gradient(rgba(255,255,255,0.02) 0% 25%, transparent 0% 50%)",
+        backgroundImage:
+          "repeating-conic-gradient(rgba(255,255,255,0.02) 0% 25%, transparent 0% 50%)",
         backgroundSize: "32px 32px",
       }}
     >
@@ -49,8 +63,14 @@ export default function LoginPage() {
 
         {/* Card */}
         <div className="rounded-2xl bg-panel border border-border-subtle shadow-[0_8px_40px_rgba(0,0,0,0.4)] p-6">
-          <h1 className="text-base font-semibold mb-1">Sign in</h1>
-          <p className="text-xs text-text-muted mb-5">Welcome back to your creative studio.</p>
+          <h1 className="text-base font-semibold mb-1">
+            {mode === "signin" ? "Sign in" : "Create account"}
+          </h1>
+          <p className="text-xs text-text-muted mb-5">
+            {mode === "signin"
+              ? "Welcome back to your creative studio."
+              : "Set up your FrameForge account."}
+          </p>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-3">
             <div className="flex flex-col gap-1">
@@ -71,6 +91,7 @@ export default function LoginPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
+                minLength={6}
                 placeholder="••••••••"
                 className="h-9 bg-canvas border border-border-subtle rounded-lg px-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-warm/30 focus:border-accent-warm/40"
               />
@@ -81,15 +102,41 @@ export default function LoginPage() {
                 {error}
               </p>
             )}
+            {success && (
+              <p className="text-xs text-status-success bg-status-success/10 border border-status-success/20 rounded-lg px-3 py-2">
+                {success}
+              </p>
+            )}
 
             <button
               type="submit"
               disabled={loading}
               className="mt-1 h-9 rounded-lg bg-accent-warm text-canvas text-sm font-semibold hover:brightness-110 disabled:opacity-50 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(255,184,107,0.25)] transition-all"
             >
-              {loading ? "Signing in…" : "Sign in"}
+              {loading
+                ? mode === "signin"
+                  ? "Signing in…"
+                  : "Creating account…"
+                : mode === "signin"
+                  ? "Sign in"
+                  : "Create account"}
             </button>
           </form>
+
+          <div className="mt-4 pt-4 border-t border-border-subtle text-center">
+            <button
+              onClick={() => {
+                setMode(mode === "signin" ? "signup" : "signin");
+                setError(null);
+                setSuccess(null);
+              }}
+              className="text-xs text-text-muted hover:text-text-secondary transition-colors"
+            >
+              {mode === "signin"
+                ? "No account? Create one"
+                : "Already have an account? Sign in"}
+            </button>
+          </div>
         </div>
       </div>
     </main>

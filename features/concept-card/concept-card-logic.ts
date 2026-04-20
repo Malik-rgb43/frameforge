@@ -19,10 +19,13 @@ async function getBriefProductImages(): Promise<Array<{base64: string; mimeType:
     const p = JSON.parse(cached) as import("@/lib/supabase/types").Project;
     const brief = p.brief as unknown as import("@/features/brief/brief-types").ProjectBrief | null;
     const productImages = brief?.product_images ?? [];
-    return productImages.slice(0, 2).map((dataUrl) => {
-      const [header, base64] = dataUrl.split(",");
+    return productImages.slice(0, 2).flatMap((dataUrl) => {
+      const commaIdx = dataUrl.indexOf(",");
+      if (commaIdx === -1) return [];
+      const header = dataUrl.slice(0, commaIdx);
+      const base64 = dataUrl.slice(commaIdx + 1);
       const mimeType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg";
-      return { base64, mimeType };
+      return [{ base64, mimeType }];
     });
   } catch {
     return [];
@@ -149,15 +152,22 @@ export async function getConnectedRefImages(cardId: string): Promise<Array<{base
     if (!node.image_url) continue;
     try {
       if (node.image_url.startsWith("data:")) {
-        const [header, base64] = node.image_url.split(",");
-        const mimeType = header.split(":")[1].split(";")[0];
+        const commaIdx = node.image_url.indexOf(",");
+        if (commaIdx === -1) continue;
+        const header = node.image_url.slice(0, commaIdx);
+        const base64 = node.image_url.slice(commaIdx + 1);
+        const mimeType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg";
         results.push({ base64, mimeType });
       } else {
         const res = await fetch(node.image_url);
         const blob = await res.blob();
         const base64 = await new Promise<string>((resolve) => {
           const reader = new FileReader();
-          reader.onloadend = () => resolve((reader.result as string).split(",")[1]);
+          reader.onloadend = () => {
+            const result = reader.result as string;
+            const commaIdx = result.indexOf(",");
+            resolve(commaIdx !== -1 ? result.slice(commaIdx + 1) : "");
+          };
           reader.readAsDataURL(blob);
         });
         results.push({ base64, mimeType: blob.type || "image/jpeg" });

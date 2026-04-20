@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
   X,
@@ -37,6 +37,7 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
   const [brief, setBrief] = useState<ProjectBrief>(EMPTY_BRIEF);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const uploadingRef = useRef(false);
 
   useEffect(() => {
     if (!project) return;
@@ -76,11 +77,17 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
     }
   };
 
+  const ALLOWED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+
   const handleProductImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files ?? []);
+    if (uploadingRef.current) return;
+    const files = Array.from(e.target.files ?? []).filter((f) =>
+      ALLOWED_IMAGE_TYPES.includes(f.type)
+    );
     if (!files.length) return;
     const existing = brief.product_images ?? [];
     const toAdd = files.slice(0, 4 - existing.length);
+    uploadingRef.current = true;
     Promise.all(
       toAdd.map(
         (f) =>
@@ -92,6 +99,7 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
       )
     ).then((newUrls) => {
       setField("product_images", [...existing, ...newUrls]);
+      uploadingRef.current = false;
     });
     e.target.value = "";
   };

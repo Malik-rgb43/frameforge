@@ -31,8 +31,7 @@ async function urlToBase64(url: string): Promise<{ base64: string; mimeType: str
     const blob = await res.blob();
     const buffer = await blob.arrayBuffer();
     const bytes = new Uint8Array(buffer);
-    let binary = "";
-    for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
+    const binary = Array.from(bytes, (b) => String.fromCharCode(b)).join("");
     return { base64: btoa(binary), mimeType: blob.type || "image/jpeg" };
   } catch {
     return null;
@@ -70,10 +69,13 @@ async function getBriefProductImages(): Promise<Array<{ base64: string; mimeType
     const p = JSON.parse(cached) as import("@/lib/supabase/types").Project;
     const brief = p.brief as unknown as import("@/features/brief/brief-types").ProjectBrief | null;
     const productImages = brief?.product_images ?? [];
-    return productImages.slice(0, 2).map((dataUrl) => {
-      const [header, base64] = dataUrl.split(",");
+    return productImages.slice(0, 2).flatMap((dataUrl) => {
+      const commaIdx = dataUrl.indexOf(",");
+      if (commaIdx === -1) return [];
+      const header = dataUrl.slice(0, commaIdx);
+      const base64 = dataUrl.slice(commaIdx + 1);
       const mimeType = header.split(":")[1]?.split(";")[0] ?? "image/jpeg";
-      return { base64, mimeType };
+      return [{ base64, mimeType }];
     });
   } catch {
     return [];
