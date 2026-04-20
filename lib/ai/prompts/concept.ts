@@ -29,13 +29,19 @@ const CONCEPT_SCHEMA = `{
 
 export function conceptFromBriefSystem(count = 5): string {
   return buildSystemPrompt(
-    `Generate ${count} distinct marketing concepts. Each must target a DIFFERENT avatar, pain, or awareness stage — not just different palettes. No two concepts should share their core insight. Lead with AVATAR + PAIN + UNEXPECTED ANGLE, not with the product.`,
+    `Generate ${count} distinct direct-response ad concepts for short-form video (Meta/TikTok/YouTube). Each must:
+- Target a DIFFERENT avatar, pain level, or awareness stage — not just a different palette
+- Have a distinct hook archetype (no two concepts can share the same one)
+- Be producible as a 6-20 second short-form video — no concepts that need cinematic budgets
+- Lead with AVATAR PAIN + UNEXPECTED ANGLE, not with the product or brand
+
+The first 3 seconds of each concept must be visualizable as a single specific image that would stop a scroll.`,
     CONCEPT_SCHEMA,
     "bold"
   );
 }
 
-export function conceptFromBriefUser(brief: Brief, refCount = 0): string {
+export function conceptFromBriefUser(brief: Brief, refCount = 0, count = 5): string {
   return `INPUT BRIEF:
 - Project: ${brief.projectName}${brief.client ? ` (${brief.client})` : ""}
 - Product: ${brief.product}
@@ -51,7 +57,7 @@ ${brief.productReviews ? `- Voice-of-customer (reviews):\n${brief.productReviews
 ${brief.competitors?.length ? `- Competitors to differentiate from: ${brief.competitors.join(", ")}` : ""}
 ${refCount > 0 ? `- Reference images attached: ${refCount} (analyze their mood/palette/composition as inputs)` : "- No reference images — invent the visual world from scratch"}
 
-Generate exactly ${5} concepts. At least 2 must be "bold" or "breakthrough" level.`;
+Generate exactly ${count} concepts. At least ${Math.ceil(count * 0.4)} must be "bold" or "breakthrough" level. Each must target a DIFFERENT avatar/pain/awareness stage — not just a different palette.`;
 }
 
 // ─────────────────────────────────────────────────────────

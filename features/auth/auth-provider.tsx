@@ -52,15 +52,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const sb = createClient();
 
-    sb.auth.getSession().then(async ({ data: { session } }) => {
-      if (!session?.user) {
-        setState({ user: null, workspaceId: null, loading: false });
-        return;
-      }
-      const workspaceId = await ensureWorkspace(session.user.id);
-      setState({ user: session.user, workspaceId, loading: false });
-    });
-
+    // onAuthStateChange fires INITIAL_SESSION immediately on mount (covers the
+    // getSession path too), so we only need one handler to avoid calling
+    // ensureWorkspace twice and causing duplicate dashboard refreshes.
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (_event, session) => {
       if (!session?.user) {
         setState({ user: null, workspaceId: null, loading: false });

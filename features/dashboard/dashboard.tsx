@@ -28,18 +28,15 @@ import SettingsPanel from "@/features/shell/settings-panel";
 
 type ViewMode = "grid" | "list";
 
-interface ProjectCard extends Project {
-  shotCount: number;
-  boardCount: number;
-}
+type ProjectCard = Project;
 
 export default function Dashboard() {
   const t = useI18n((s) => s.t);
   const router = useRouter();
-  const { workspaceId } = useAuth();
+  const { workspaceId, loading: authLoading } = useAuth();
 
   const [projects, setProjects] = useState<ProjectCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [view, setView] = useState<ViewMode>("grid");
   const [query, setQuery] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -47,24 +44,12 @@ export default function Dashboard() {
   const [menuFor, setMenuFor] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
+    if (!workspaceId) return;
     setLoading(true);
     try {
       const adapter = await getDataAdapter();
-      const list = await adapter.listProjects(workspaceId ?? "ws_demo");
-      const withCounts = await Promise.all(
-        list.map(async (p) => {
-          const boards = await adapter.listBoards(p.id);
-          let shots = 0;
-          for (const b of boards) {
-            const ns = await adapter.listNodes(b.id);
-            shots += ns.filter(
-              (n) => n.type === "shot" || n.type === "continuation"
-            ).length;
-          }
-          return { ...p, shotCount: shots, boardCount: boards.length };
-        })
-      );
-      setProjects(withCounts);
+      const list = await adapter.listProjects(workspaceId);
+      setProjects(list);
     } catch (err) {
       console.error("Failed to load projects:", err);
     } finally {
@@ -73,8 +58,8 @@ export default function Dashboard() {
   }, [workspaceId]);
 
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    if (workspaceId) refresh();
+  }, [workspaceId, refresh]);
 
   const filtered = useMemo(() => {
     const q = query.toLowerCase().trim();
@@ -88,11 +73,10 @@ export default function Dashboard() {
   }, [projects, query]);
 
   const onCreate = async (name: string) => {
-    setWizardOpen(false);
+    if (!workspaceId) throw new Error("Workspace not ready");
     const adapter = await getDataAdapter();
-    const project = await adapter.createProject(workspaceId ?? "ws_demo", {
-      name,
-    });
+    const project = await adapter.createProject(workspaceId, { name });
+    setWizardOpen(false);
     router.push(`/studio/${project.id}`);
   };
 
@@ -109,9 +93,10 @@ export default function Dashboard() {
   };
 
   const duplicateProject = async (src: Project) => {
+    if (!workspaceId) return;
     try {
       const adapter = await getDataAdapter();
-      await adapter.createProject(workspaceId ?? "ws_demo", {
+      await adapter.createProject(workspaceId, {
         name: src.name + " (copy)",
         client: src.client ?? undefined,
         product: src.product ?? undefined,
@@ -214,7 +199,7 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {loading ? (
+        {authLoading || loading ? (
           <SkeletonGrid />
         ) : filtered.length === 0 ? (
           <EmptyState hasQuery={!!query} onCreate={() => setWizardOpen(true)} />
@@ -406,11 +391,6 @@ function ProjectGridCard({
             <span className="text-2xs font-mono text-white/80 bg-black/40 px-1.5 py-0.5 rounded-md">
               {project.aspect}
             </span>
-            {project.shotCount > 0 && (
-              <span className="text-2xs font-mono text-white/80 bg-black/40 px-1.5 py-0.5 rounded-md">
-                {project.shotCount} shots
-              </span>
-            )}
           </div>
         </div>
         <div className="p-3">
@@ -554,8 +534,6 @@ function ProjectListRow({
             {p.client && <span className="truncate">{p.client}</span>}
             {p.client && <span>·</span>}
             <span>{p.aspect}</span>
-            <span>·</span>
-            <span>{p.shotCount} shots</span>
             <span>·</span>
             <span>{formatRelative(new Date(p.updated_at))}</span>
           </div>

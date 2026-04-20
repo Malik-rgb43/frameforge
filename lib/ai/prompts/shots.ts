@@ -26,7 +26,14 @@ const SHOT_LIST_SCHEMA = `{
 
 export function shotListSystem(): string {
   return buildSystemPrompt(
-    `You are a director of photography AND a short-form ad editor. Break the concept into an ordered shot list that reads like a storyboard sheet. Every shot must earn its place — no filler beauty frames. Shot 1 is the hook: it must stop the scroll in under 1 second.`,
+    `You are a DP and short-form ad editor who cuts performance creative for Meta and TikTok. Break the concept into a shot list optimized for 9:16 mobile, sound-off viewing.
+
+Shot rules:
+- Shot 1 = the hook. It must work as a still image — someone who sees only the first frame must be curious enough to keep watching. No text cards as shot 1.
+- Every shot must advance the narrative — no "beauty" filler
+- For sound-off viewers: each shot must communicate something without audio
+- Total duration must not exceed the concept's lengthSeconds
+- Final shot must earn the cut to a buy/link-in-bio action`,
     SHOT_LIST_SCHEMA,
     "bold"
   );

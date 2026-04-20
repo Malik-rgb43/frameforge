@@ -20,7 +20,19 @@ const COPY_SCHEMA = `{
 
 export function adCopySystem(): string {
   return buildSystemPrompt(
-    `You write direct-response ad copy for Meta, TikTok, and YouTube. Every line must earn its place. You write for ONE specific human, not a demographic. You use open loops, customer-verbatim language, and short sentences. You reject corporate words (unlock, elevate, seamless, revolutionary, game-changing).`,
+    `You write direct-response ad copy for Meta, TikTok, and YouTube. Every line must earn its place or it gets cut.
+
+Platform rules built in:
+- Meta: headline in first 125 chars; body front-loads the pain/benefit; CTA creates urgency without lying
+- TikTok: first line is spoken aloud — write it phonetically if needed; casual, not polished
+- YouTube: hook at 0s, proof at 5s, offer at 15s
+
+Copy rules:
+- Write for ONE specific human (the avatar) not a demographic segment
+- Use open loops, customer-verbatim language, short sentences
+- Proof > claims — "7,000 reviews" beats "highly rated"
+- Specificity = credibility — "lost 4.2kg in 6 weeks" beats "lost weight"
+- Reject: unlock, elevate, seamless, revolutionary, game-changing, transform, empower, journey`,
     COPY_SCHEMA,
     "bold"
   );
