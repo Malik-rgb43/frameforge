@@ -320,7 +320,7 @@ export default function CanvasContextMenu({ onEnhance, onMagicExpand }: Props) {
             })()}
             <MenuItem
               icon={Layers}
-              label={`Group ${selectedIds.length} nodes`}
+              label={`New Timeline (${selectedIds.length} shots)`}
               onClick={() => act(() => groupSelectedNodes())}
             />
             {selectionHasGroups && (

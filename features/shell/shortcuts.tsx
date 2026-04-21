@@ -7,7 +7,7 @@ import {
   uploadImagesAsSources,
 } from "@/features/upload/upload-utils";
 import { getDataAdapter } from "@/lib/data-adapter";
-import { createConceptCard } from "@/features/concept-card/concept-card-logic";
+import { createConceptCard, groupSelectedNodes } from "@/features/concept-card/concept-card-logic";
 import type { NodeRow, NodeInput } from "@/lib/supabase/types";
 
 interface Props {
@@ -32,8 +32,9 @@ export default function ShortcutsHandler({
 
       const meta = e.metaKey || e.ctrlKey;
       const state = useCanvas.getState();
-      const selected = state.selectedNodeIds[0]
-        ? state.nodes.find((n) => n.id === state.selectedNodeIds[0])
+      const selectedIds = state.selectedNodeIds;
+      const selected = selectedIds[0]
+        ? state.nodes.find((n) => n.id === selectedIds[0])
         : null;
 
       // Global (work even when typing)
@@ -49,7 +50,7 @@ export default function ShortcutsHandler({
         return;
       }
       // ⌘+D → duplicate selected
-      if (meta && e.key.toLowerCase() === "d" && selected) {
+      if (meta && e.key.toLowerCase() === "d" && selectedIds.length === 1 && selected) {
         e.preventDefault();
         await duplicateNode(selected);
         return;
@@ -102,11 +103,18 @@ export default function ShortcutsHandler({
           if (files.length > 0) uploadImagesAsSources(files).catch(console.error);
           break;
         }
+        case "t":
+        case "T":
+          if (selectedIds.length >= 2) {
+            e.preventDefault();
+            groupSelectedNodes().catch(console.error);
+          }
+          break;
         case "Delete":
         case "Backspace":
-          if (selected) {
+          if (selectedIds.length > 0) {
             e.preventDefault();
-            await deleteNode(selected);
+            await deleteNodes(selectedIds, state.nodes);
           }
           break;
       }
@@ -136,13 +144,17 @@ async function duplicateNode(src: NodeRow) {
   }
 }
 
-async function deleteNode(n: NodeRow) {
+async function deleteNodes(ids: string[], nodes: NodeRow[]) {
   const state = useCanvas.getState();
   const adapter = await getDataAdapter();
-  try {
-    await adapter.deleteNode(n.id);
-  } catch {
-    /* ignore */
-  }
-  state.removeNode(n.id);
+  await Promise.all(
+    ids.map(async (id) => {
+      try {
+        await adapter.deleteNode(id);
+      } catch {
+        /* ignore — remove from canvas anyway */
+      }
+      state.removeNode(id);
+    })
+  );
 }

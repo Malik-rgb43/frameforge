@@ -103,7 +103,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialise from localStorage cache — eliminates skeleton on repeat visits
   const [state, setState] = useState<AuthState>(() => {
     const cached = getCachedWorkspaceId();
-    return { user: null, workspaceId: cached, loading: true };
+    return { user: null, workspaceId: cached, loading: !cached };
   });
 
   useEffect(() => {
@@ -118,6 +118,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
       const patch = await resolveSession(session);
       setState((s) => ({ ...s, ...patch }));
+    }).catch((err) => {
+      console.error("getSession failed", err);
+      setState({ user: null, workspaceId: null, loading: false });
     });
 
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (event, session) => {

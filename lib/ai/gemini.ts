@@ -20,6 +20,7 @@ export interface GeminiCallOptions {
   temperature?: number;
   responseMimeType?: "application/json" | "text/plain";
   images?: Array<{ inlineData: { mimeType: string; data: string } }>;
+  signal?: AbortSignal;
 }
 
 const MODEL_TO_API: Record<string, string> = {
@@ -59,7 +60,7 @@ export async function callGemini<T>(
       userParts.push({ inlineData: { data: img.inlineData.data, mimeType: img.inlineData.mimeType } });
     }
   }
-  const response = await client.models.generateContent({
+  const generatePromise = client.models.generateContent({
     model: apiModel,
     contents: [{ role: "user", parts: userParts }],
     config: {
@@ -68,6 +69,19 @@ export async function callGemini<T>(
       responseMimeType: opts.responseMimeType ?? "application/json",
     },
   });
+
+  const response = opts.signal
+    ? await Promise.race([
+        generatePromise,
+        new Promise<never>((_, reject) => {
+          opts.signal!.addEventListener(
+            "abort",
+            () => reject(opts.signal!.reason ?? new Error("Gemini aborted")),
+            { once: true }
+          );
+        }),
+      ])
+    : await generatePromise;
 
   const text = response.text ?? "";
   let data: T;

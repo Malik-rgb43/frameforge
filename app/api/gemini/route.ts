@@ -50,6 +50,7 @@ export async function POST(req: Request) {
       temperature,
       responseMimeType,
       images,
+      signal: controller.signal,
     }).finally(() => clearTimeout(timeoutId));
 
     logGeneration({
