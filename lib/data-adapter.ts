@@ -253,7 +253,8 @@ async function makeSupabaseAdapter(): Promise<DataAdapter> {
 
   return {
     async listWorkspaces() {
-      const { data } = await sb.from("workspaces").select("*");
+      const { data, error } = await sb.from("workspaces").select("*");
+      if (error) throw error;
       return (data ?? []) as Workspace[];
     },
     async listProjects(workspaceId) {
@@ -261,6 +262,7 @@ async function makeSupabaseAdapter(): Promise<DataAdapter> {
         .from("projects")
         .select("*")
         .eq("workspace_id", workspaceId)
+        .neq("status", "deleted")
         .order("updated_at", { ascending: false });
       return (data ?? []) as Project[];
     },
@@ -312,25 +314,28 @@ async function makeSupabaseAdapter(): Promise<DataAdapter> {
       if (error) throw error;
     },
     async listBoards(projectId) {
-      const { data } = await sb
+      const { data, error } = await sb
         .from("boards")
         .select("*")
         .eq("project_id", projectId)
         .order("order_index");
+      if (error) throw error;
       return (data ?? []) as Board[];
     },
     async listNodes(boardId) {
-      const { data } = await sb
+      const { data, error } = await sb
         .from("nodes")
         .select("*")
         .eq("board_id", boardId);
+      if (error) throw error;
       return (data ?? []) as NodeRow[];
     },
     async listEdges(boardId) {
-      const { data } = await sb
+      const { data, error } = await sb
         .from("edges")
         .select("*")
         .eq("board_id", boardId);
+      if (error) throw error;
       return (data ?? []) as EdgeRow[];
     },
     async createNode(input) {
@@ -345,7 +350,7 @@ async function makeSupabaseAdapter(): Promise<DataAdapter> {
     async updateNode(id, patch) {
       const { data, error } = await sb
         .from("nodes")
-        .update(patch)
+        .update({ ...patch, updated_at: new Date().toISOString() })
         .eq("id", id)
         .select("*")
         .single();

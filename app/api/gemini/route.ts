@@ -41,12 +41,16 @@ export async function POST(req: Request) {
       );
     }
 
+    // Enforce an explicit 55s timeout so callers get a clear error message instead
+    // of a silent Vercel 504 when the Gemini API hangs near the 60s maxDuration limit.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error("Gemini timed out after 55s")), 55_000);
     const result = await callGemini(systemPrompt, userPrompt, {
       model,
       temperature,
       responseMimeType,
       images,
-    });
+    }).finally(() => clearTimeout(timeoutId));
 
     logGeneration({
       workspace_id: workspaceId ?? undefined,

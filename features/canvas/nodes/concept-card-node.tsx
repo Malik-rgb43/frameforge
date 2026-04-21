@@ -59,6 +59,7 @@ export default function ConceptCardNode({
   const [aspect, setAspect] = useState(meta.aspect ?? "9:16");
   const [imageModel, setImageModel] = useState((meta as { image_model?: string }).image_model ?? "gemini-2.0-flash-exp-image-generation");
   const [suggesting, setSuggesting] = useState(false);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<ConceptSuggestion[]>(
     meta.suggestions ?? []
   );
@@ -75,6 +76,7 @@ export default function ConceptCardNode({
 
   const runSuggest = async () => {
     setSuggesting(true);
+    setSuggestError(null);
     try {
       const refImages = await getConnectedRefImages(row.id);
       const ideas = await suggestConceptIdeas(idea || "", refImages);
@@ -83,6 +85,9 @@ export default function ConceptCardNode({
         metadata: { ...meta, suggestions: ideas } as unknown as import("@/lib/supabase/types").Json,
         updated_at: new Date().toISOString(),
       });
+    } catch (err) {
+      console.error("suggest ideas failed", err);
+      setSuggestError(err instanceof Error ? err.message : "Suggestion failed");
     } finally {
       setSuggesting(false);
     }
@@ -245,6 +250,13 @@ export default function ConceptCardNode({
                 </button>
               </div>
             </div>
+
+            {/* Suggest error */}
+            {suggestError && (
+              <div className="text-[9px] text-status-error font-mono px-2 py-1.5 rounded-lg bg-status-error/10 border border-status-error/20">
+                {suggestError}
+              </div>
+            )}
 
             {/* Concept suggestion cards */}
             {suggestions.length > 0 && (

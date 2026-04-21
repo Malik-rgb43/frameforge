@@ -13,15 +13,19 @@ interface Props {
 export default function SimpleNewProject({ open, onClose, onCreate }: Props) {
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const canSubmit = name.trim().length > 0 && !busy;
 
   const submit = async () => {
     if (!canSubmit) return;
     setBusy(true);
+    setError(null);
     try {
       await onCreate(name.trim());
       setName("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create project");
     } finally {
       setBusy(false);
     }
@@ -78,6 +82,11 @@ export default function SimpleNewProject({ open, onClose, onCreate }: Props) {
                   placeholder="e.g. Summer Launch — Cold Brew"
                   className="w-full h-10 bg-canvas border border-border-subtle rounded-lg px-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-2 focus:ring-accent-warm/40 focus:border-accent-warm/30"
                 />
+                {error && (
+                  <p className="text-2xs text-status-error bg-status-error/10 border border-status-error/20 rounded-lg px-3 py-2">
+                    {error}
+                  </p>
+                )}
                 <p className="text-2xs text-text-muted leading-relaxed">
                   A blank board will be created. Drop Concept Cards, upload
                   references, and generate shots right on the canvas.

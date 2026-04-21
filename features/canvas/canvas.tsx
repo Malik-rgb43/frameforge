@@ -9,6 +9,7 @@ import ReactFlow, {
   useEdgesState,
   useReactFlow,
   useOnViewportChange,
+  useStore,
   type Edge,
   type Node,
   type NodeChange,
@@ -104,18 +105,23 @@ function SelectionToolbar() {
 }
 
 function ZoomHud() {
-  const [zoom, setZoom] = useState(1);
   const [show, setShow] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Use useStore to directly subscribe to the RF transform — avoids conflict
+  // with the single useOnViewportChange slot used by CanvasInner for localStorage save.
+  const zoom = useStore((s) => s.transform[2]);
+  const prevZoomRef = useRef(zoom);
 
-  useOnViewportChange({
-    onChange: (v: Viewport) => {
-      setZoom(v.zoom);
-      setShow(true);
+  useEffect(() => {
+    if (zoom === prevZoomRef.current) return;
+    prevZoomRef.current = zoom;
+    setShow(true);
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => setShow(false), 900);
+    return () => {
       if (timer.current) clearTimeout(timer.current);
-      timer.current = setTimeout(() => setShow(false), 900);
-    },
-  });
+    };
+  }, [zoom]);
 
   return (
     <AnimatePresence>
@@ -510,6 +516,18 @@ function CanvasInner() {
             <ZoomHud />
           </div>
         </Panel>
+        {nodeRows.length === 0 && (
+          <Panel position="bottom-center">
+            <div className="mb-36 pointer-events-none select-none">
+              <div className="px-4 py-3 rounded-xl glass-panel border border-border-subtle/50 text-center max-w-[260px]">
+                <div className="text-xs font-medium text-text-secondary mb-1">Canvas is empty</div>
+                <div className="text-2xs text-text-muted font-mono leading-relaxed">
+                  Drop images here, or use the chat bar below to generate shots
+                </div>
+              </div>
+            </div>
+          </Panel>
+        )}
         <Panel position="bottom-center">
           <div className="mb-24">
             <SelectionToolbar />

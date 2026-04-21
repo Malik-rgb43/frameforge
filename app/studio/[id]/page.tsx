@@ -113,6 +113,14 @@ export default function StudioPage({ params }: { params: { id: string } }) {
       if (!active) return;
       setBoard(board.id, nds, eds);
       setLoading(false);
+      // Auto-fit to loaded nodes only if no saved viewport exists for this board
+      if (nds.length > 0 && typeof window !== "undefined") {
+        const hasSaved = !!localStorage.getItem(`ff.vp.${board.id}`);
+        if (!hasSaved) {
+          // Small delay so ReactFlow has processed the new nodes before fitView
+          setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
+        }
+      }
     })();
     return () => {
       active = false;
@@ -226,15 +234,18 @@ export default function StudioPage({ params }: { params: { id: string } }) {
         />
         {viewMode === "board" && <ToolRail active={tool} onPick={handleToolPick} />}
 
-        {loading ? (
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-            <div className="flex items-center gap-3 text-text-muted">
-              <Loader2 className="w-4 h-4 animate-spin text-accent-warm" />
-              <span className="text-xs font-mono">Loading board...</span>
-            </div>
-          </div>
-        ) : viewMode === "board" ? (
-          <Canvas />
+        {viewMode === "board" ? (
+          <>
+            <Canvas />
+            {loading && (
+              <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                <div className="flex items-center gap-3 text-text-muted">
+                  <Loader2 className="w-4 h-4 animate-spin text-accent-warm" />
+                  <span className="text-xs font-mono">Loading board...</span>
+                </div>
+              </div>
+            )}
+          </>
         ) : (
           <StoryboardView />
         )}
