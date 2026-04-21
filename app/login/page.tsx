@@ -23,10 +23,12 @@ export default function LoginPage() {
 
     try {
       if (mode === "signup") {
-        const { error } = await sb.auth.signUp({ email, password });
-        if (error) throw error;
-        setSuccess("Account created — check your email to confirm, then sign in.");
-        setMode("signin");
+        const { error: signUpError } = await sb.auth.signUp({ email, password });
+        if (signUpError) throw signUpError;
+        const { error: signInError } = await sb.auth.signInWithPassword({ email, password });
+        if (signInError) throw signInError;
+        router.push("/");
+        router.refresh();
       } else {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
