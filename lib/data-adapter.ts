@@ -267,12 +267,17 @@ async function makeSupabaseAdapter(): Promise<DataAdapter> {
       return (data ?? []) as Project[];
     },
     async getProject(projectId) {
-      const { data } = await sb
-        .from("projects")
-        .select("*")
-        .eq("id", projectId)
-        .maybeSingle();
-      return (data ?? null) as Project | null;
+      try {
+        const { data } = await sb
+          .from("projects")
+          .select("*")
+          .eq("id", projectId)
+          .maybeSingle();
+        return (data ?? null) as Project | null;
+      } catch (e) {
+        console.warn("[data-adapter] getProject failed:", e);
+        return null;
+      }
     },
     async createProject(workspaceId, input) {
       const { data, error } = await sb
@@ -314,29 +319,44 @@ async function makeSupabaseAdapter(): Promise<DataAdapter> {
       if (error) throw error;
     },
     async listBoards(projectId) {
-      const { data, error } = await sb
-        .from("boards")
-        .select("*")
-        .eq("project_id", projectId)
-        .order("order_index");
-      if (error) throw error;
-      return (data ?? []) as Board[];
+      try {
+        const { data, error } = await sb
+          .from("boards")
+          .select("*")
+          .eq("project_id", projectId)
+          .order("order_index");
+        if (error) throw error;
+        return (data ?? []) as Board[];
+      } catch (e) {
+        console.warn("[data-adapter] listBoards failed:", e);
+        return [];
+      }
     },
     async listNodes(boardId) {
-      const { data, error } = await sb
-        .from("nodes")
-        .select("*")
-        .eq("board_id", boardId);
-      if (error) throw error;
-      return (data ?? []) as NodeRow[];
+      try {
+        const { data, error } = await sb
+          .from("nodes")
+          .select("*")
+          .eq("board_id", boardId);
+        if (error) throw error;
+        return (data ?? []) as NodeRow[];
+      } catch (e) {
+        console.warn("[data-adapter] listNodes failed:", e);
+        return [];
+      }
     },
     async listEdges(boardId) {
-      const { data, error } = await sb
-        .from("edges")
-        .select("*")
-        .eq("board_id", boardId);
-      if (error) throw error;
-      return (data ?? []) as EdgeRow[];
+      try {
+        const { data, error } = await sb
+          .from("edges")
+          .select("*")
+          .eq("board_id", boardId);
+        if (error) throw error;
+        return (data ?? []) as EdgeRow[];
+      } catch (e) {
+        console.warn("[data-adapter] listEdges failed:", e);
+        return [];
+      }
     },
     async createNode(input) {
       const { data, error } = await sb
