@@ -29,9 +29,15 @@ export interface NanoBananaCallOptions {
   signal?: AbortSignal;
 }
 
-// Single image model — the only Gemini model that supports responseModalities IMAGE
-// with the standard Gemini Developer API key.
-const IMAGE_MODEL = "gemini-2.0-flash-exp";
+// Model tier mapping:
+// nanobanana-pro  → gemini-2.0-flash-preview-image-generation (dedicated image model, highest fidelity)
+// nanobanana-2    → gemini-2.0-flash-preview-image-generation (same, mid-tier pricing label)
+// nanobanana-flash → gemini-2.0-flash-exp (experimental, faster, for drafts)
+const MODEL_MAP: Record<string, string> = {
+  "nanobanana-pro":   "gemini-2.0-flash-preview-image-generation",
+  "nanobanana-2":     "gemini-2.0-flash-preview-image-generation",
+  "nanobanana-flash": "gemini-2.0-flash-exp",
+};
 
 let _client: GoogleGenAI | null = null;
 function getClient(): GoogleGenAI {
@@ -80,6 +86,7 @@ async function callNanaBananaOnce(
   started: number
 ): Promise<NanoBananaResult> {
   const modelId = opts.modelId ?? "nanobanana-pro";
+  const apiModel = MODEL_MAP[modelId] ?? MODEL_MAP["nanobanana-pro"];
 
   // Abort early if caller already cancelled
   if (opts.signal?.aborted) {
@@ -102,7 +109,7 @@ async function callNanaBananaOnce(
   }
 
   const response = await client.models.generateContent({
-    model: IMAGE_MODEL,
+    model: apiModel,
     contents: [{ role: "user", parts }],
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     config: { responseModalities: ["IMAGE"] } as any,
