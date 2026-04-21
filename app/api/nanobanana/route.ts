@@ -39,13 +39,18 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "prompt required" }, { status: 400 });
     }
 
+    // Enforce an explicit 55s timeout so callers get a clear error message instead
+    // of a silent Vercel 504 when the Gemini API hangs near the 60s maxDuration limit.
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(new Error("NanaBanana timed out after 55s")), 55_000);
     const result = await callNanoBanana(prompt, {
       modelId,
       aspectRatio,
       refImages,
       thinkingLevel,
       seed,
-    });
+      signal: controller.signal,
+    }).finally(() => clearTimeout(timeoutId));
 
     // Fire-and-forget log
     logGeneration({

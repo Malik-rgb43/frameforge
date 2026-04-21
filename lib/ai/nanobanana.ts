@@ -21,6 +21,8 @@ export interface NanoBananaCallOptions {
   thinkingLevel?: "LOW" | "HIGH";
   seed?: number;
   refImages?: Array<{ base64: string; mimeType: string }>;
+  /** Optional AbortSignal — if aborted, the call throws immediately. */
+  signal?: AbortSignal;
 }
 
 const MODEL_TO_API: Record<string, string> = {
@@ -43,13 +45,33 @@ export function isNanoBananaConfigured(): boolean {
   return !!process.env.GOOGLE_GENAI_API_KEY;
 }
 
-export async function callNanoBanana(
+/** Returns true for transient errors that are safe to retry (network, 503, quota). */
+function isTransientError(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message.toLowerCase() : "";
+  return (
+    msg.includes("network") ||
+    msg.includes("fetch") ||
+    msg.includes("econnreset") ||
+    msg.includes("503") ||
+    msg.includes("rate limit") ||
+    msg.includes("quota") ||
+    msg.includes("timeout") ||
+    msg.includes("aborted")
+  );
+}
+
+async function callNanaBananaOnce(
   prompt: string,
-  opts: NanoBananaCallOptions = {}
+  opts: NanoBananaCallOptions,
+  started: number
 ): Promise<NanoBananaResult> {
-  const started = Date.now();
   const modelId = opts.modelId ?? "nanobanana-pro";
   const apiModel = MODEL_TO_API[modelId];
+
+  // Abort early if caller already cancelled
+  if (opts.signal?.aborted) {
+    throw new Error("NanaBanana call aborted before start");
+  }
 
   const client = getClient();
 
@@ -98,4 +120,22 @@ export async function callNanoBanana(
       durationMs: Date.now() - started,
     },
   };
+}
+
+export async function callNanoBanana(
+  prompt: string,
+  opts: NanoBananaCallOptions = {}
+): Promise<NanoBananaResult> {
+  const started = Date.now();
+  try {
+    return await callNanaBananaOnce(prompt, opts, started);
+  } catch (firstErr) {
+    // 1 retry for transient errors (network hiccup, 503, quota backoff).
+    // Non-transient errors (bad key, invalid prompt, "returned no image") are NOT retried.
+    if (isTransientError(firstErr) && !opts.signal?.aborted) {
+      await new Promise((r) => setTimeout(r, 2000));
+      return await callNanaBananaOnce(prompt, opts, started);
+    }
+    throw firstErr;
+  }
 }

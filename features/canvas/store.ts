@@ -93,8 +93,10 @@ export const useCanvas = create<CanvasState>()(
         edges,
         groups,
         selectedNodeIds: [],
+        hoveredNodeId: null,
         refNodeIds: [],
         inspectorNodeId: null,
+        contextMenu: null,
       }),
 
     upsertGroup: (group) =>
@@ -136,7 +138,9 @@ export const useCanvas = create<CanvasState>()(
       }));
       import("@/lib/data-adapter").then(({ getDataAdapter }) =>
         Promise.resolve(getDataAdapter()).then((adapter) =>
-          adapter.updateNode(id, patch).catch(() => {})
+          adapter.updateNode(id, patch).catch((err) => {
+            console.error("[updateNode] DB save failed:", err);
+          })
         )
       );
     },
@@ -222,7 +226,9 @@ export const useCanvas = create<CanvasState>()(
       set((s) => ({ edges: s.edges.filter((e) => e.id !== id) }));
       import("@/lib/data-adapter").then(({ getDataAdapter }) =>
         Promise.resolve(getDataAdapter()).then((adapter) =>
-          adapter.deleteEdge(id).catch(() => {})
+          adapter.deleteEdge(id).catch((err) => {
+            console.error("[removeEdge] DB delete failed:", err);
+          })
         )
       );
     },

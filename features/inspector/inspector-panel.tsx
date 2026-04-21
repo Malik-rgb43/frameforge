@@ -282,6 +282,7 @@ function AnimationTab({ node }: { node: NodeRow }) {
   const t = useI18n((s) => s.t);
   const upsertNode = useCanvas((s) => s.upsertNode);
   const [busy, setBusy] = useState(false);
+  const [genError, setGenError] = useState<string | null>(null);
   const [model, setModel] = useState<"kling-3" | "runway-gen3" | "seedance-2" | "sora" | "any">("kling-3");
 
   const existing = (node.metadata as { animation_prompt?: string } | null)
@@ -290,6 +291,7 @@ function AnimationTab({ node }: { node: NodeRow }) {
   const generate = async () => {
     if (busy) return;
     setBusy(true);
+    setGenError(null);
     try {
       const systemPrompt = `You are a cinematographer writing image-to-video motion prompts. Output JSON only:
 {"motionPrompt":"string under 60 words","modelHint":"kling-3|runway-gen3|seedance-2|sora|any","durationSeconds":3,"pacing":"slow|medium|punchy","finalBeat":"1 sentence"}
@@ -339,6 +341,7 @@ Write the motion prompt. JSON only.`;
       }
     } catch (err) {
       console.error("motion prompt gen failed", err);
+      setGenError(err instanceof Error ? err.message : "Generation failed");
     } finally {
       setBusy(false);
     }
@@ -350,6 +353,11 @@ Write the motion prompt. JSON only.`;
         <Film className="w-4 h-4 text-accent-cool flex-shrink-0 mt-0.5" />
         <span>{t("inspector.anim.intro")}</span>
       </div>
+      {genError && (
+        <div className="text-xs text-status-error px-3 py-2 rounded-lg bg-status-error/10 border border-status-error/20">
+          {genError}
+        </div>
+      )}
 
       {existing ? (
         <PromptBlock

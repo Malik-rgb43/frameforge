@@ -191,7 +191,8 @@ export default function Dashboard() {
             <ViewToggle value={view} onChange={setView} />
             <button
               onClick={() => setWizardOpen(true)}
-              className="h-9 px-4 rounded-lg bg-accent-warm text-canvas text-sm font-medium hover:brightness-110 shadow-[0_0_20px_rgba(255,184,107,0.25)] flex items-center gap-2"
+              disabled={authLoading || !workspaceId}
+              className="h-9 px-4 rounded-lg bg-accent-warm text-canvas text-sm font-medium hover:brightness-110 shadow-[0_0_20px_rgba(255,184,107,0.25)] flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:brightness-100"
             >
               <Plus className="w-4 h-4" />
               New project

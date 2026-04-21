@@ -36,9 +36,8 @@ async function getProjectBriefContext(): Promise<string> {
   const state = useCanvas.getState();
   if (!state.boardId) return "";
   try {
-    const adapter = await getDataAdapter();
-    // Board → Project chain: we don't have a direct way, so traverse via mock/supabase
-    // Simplified: check sessionStorage cache set by the Studio page
+    // Simplified: check sessionStorage cache set by the Studio page.
+    // If empty, returns "" gracefully — all callers handle a missing brief.
     if (typeof window !== "undefined") {
       const cached = sessionStorage.getItem("ff.active.project");
       if (cached) {
@@ -443,6 +442,10 @@ export async function generateWorkflow(
   if (!card) throw new Error("card not found");
   if (!state.boardId) throw new Error("no board");
 
+  // Track all shot nodes created during this workflow so the outer catch can
+  // reset any that are stuck in "generating" if the workflow throws mid-way.
+  const _createdShotIds: string[] = [];
+
   const meta = (card.metadata ?? {}) as {
     idea?: string;
     shot_count?: number;
@@ -469,8 +472,15 @@ export async function generateWorkflow(
   const adapter = await getDataAdapter();
   const now = new Date().toISOString();
 
-  // Read model from meta
-  const imageModel = (meta as { image_model?: string }).image_model ?? "gemini-2.0-flash-exp-image-generation";
+  // Read model from meta — always resolve to a nanobanana-* alias
+  const rawModel = (meta as { image_model?: string }).image_model ?? "nanobanana-flash";
+  const GEMINI_TO_NB: Record<string, string> = {
+    "gemini-2.0-flash-exp-image-generation": "nanobanana-flash",
+    "gemini-2.5-flash-image": "nanobanana-flash",
+    "gemini-3-pro-image-preview": "nanobanana-pro",
+    "gemini-3.1-flash-image-preview": "nanobanana-2",
+  };
+  const imageModel = GEMINI_TO_NB[rawModel] ?? rawModel;
 
   // 1. Create group
   const groupInput = {
@@ -557,6 +567,7 @@ export async function generateWorkflow(
     }
     state.upsertNode(shotNode);
     createdShots.push(shotNode);
+    _createdShotIds.push(shotNode.id);
 
     // Edge from previous shot → this one (continuity) or from concept card → shot 1
     const src = i === 0 ? card : createdShots[i - 1];
@@ -595,19 +606,16 @@ export async function generateWorkflow(
           refImages: refImages.map((img) => ({ base64: img.base64, mimeType: img.mimeType })),
         }),
       });
-      let imageUrl: string | null = null;
-      let costUsd = 0;
-      if (res.ok) {
-        const data = (await res.json()) as {
-          imageBase64: string;
-          mimeType: string;
-          usage?: { costUsd?: number };
-        };
-        imageUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
-        costUsd = data.usage?.costUsd ?? 0;
-      }
+      if (!res.ok) throw new Error(`nanobanana HTTP ${res.status}`);
+      const data = (await res.json()) as {
+        imageBase64: string;
+        mimeType: string;
+        usage?: { costUsd?: number };
+      };
+      const imageUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+      const costUsd = data.usage?.costUsd ?? 0;
       const patch: Partial<NodeRow> = {
-        image_url: imageUrl ?? pickMock(i),
+        image_url: imageUrl,
         status: "ready",
         quality_score: 78 + Math.floor(Math.random() * 18),
         metadata: {
@@ -628,11 +636,14 @@ export async function generateWorkflow(
       }
     } catch (err) {
       console.warn("workflow shot failed", err);
-      state.upsertNode({
-        ...shot,
-        image_url: pickMock(i),
-        status: "ready",
-      });
+      // Show error state — no fake mock images
+      const errorPatch: Partial<NodeRow> = { image_url: null, status: "error" };
+      try {
+        const updated = await adapter.updateNode(shot.id, errorPatch);
+        state.upsertNode(updated);
+      } catch {
+        state.upsertNode({ ...shot, ...errorPatch, updated_at: new Date().toISOString() } as NodeRow);
+      }
     }
   }
 
@@ -687,22 +698,31 @@ export async function generateWorkflow(
 
   return group;
   } catch (err) {
+    // Reset concept card back to idle so the user can retry
     useCanvas.getState().updateNode(conceptCardId, {
       status: "ready",
       metadata: { ...meta, concept_state: "idle" },
     });
+    // Reset any shot nodes that were created before the crash — they'd otherwise
+    // be stuck in "generating" forever because no one else resets them.
+    if (_createdShotIds.length > 0) {
+      const canvasState = useCanvas.getState();
+      let adapter: Awaited<ReturnType<typeof getDataAdapter>> | null = null;
+      try { adapter = await getDataAdapter(); } catch { /* best-effort */ }
+      for (const shotId of _createdShotIds) {
+        const existingShot = canvasState.nodes.find((n) => n.id === shotId);
+        if (existingShot && existingShot.status === "generating") {
+          const errorPatch: Partial<NodeRow> = { status: "error" };
+          if (adapter) {
+            try { await adapter.updateNode(shotId, errorPatch); } catch { /* best-effort */ }
+          }
+          canvasState.upsertNode({ ...existingShot, ...errorPatch, updated_at: new Date().toISOString() } as NodeRow);
+        }
+      }
+    }
     throw err;
   }
 }
-
-const MOCK = [
-  "https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?w=480&h=640&fit=crop",
-  "https://images.unsplash.com/photo-1511920170033-f8396924c348?w=480&h=640&fit=crop",
-  "https://images.unsplash.com/photo-1522992319-0365e5f11656?w=480&h=640&fit=crop",
-  "https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=480&h=640&fit=crop",
-  "https://images.unsplash.com/photo-1497636577773-f1231844b336?w=480&h=640&fit=crop",
-];
-const pickMock = (i: number) => MOCK[i % MOCK.length];
 
 const GROUP_COLORS = ["#FFB86B", "#6AE3FF", "#A78BFA", "#7EE787", "#FFC857"];
 function randomGroupColor() {

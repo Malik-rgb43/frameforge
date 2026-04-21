@@ -4,6 +4,7 @@ import { Eye, Link2, Loader2, AlertCircle, CheckCircle2, Download } from "lucide
 import { cn } from "@/lib/utils";
 import { useCanvas } from "../store";
 import { useI18n } from "@/lib/i18n/store";
+import { downloadNodeImage } from "@/features/upload/upload-utils";
 import type { NodeRow } from "@/lib/supabase/types";
 
 export interface ShotNodeData {
@@ -149,15 +150,16 @@ export default function ShotNode({ data, selected }: NodeProps<ShotNodeData>) {
             <Link2 className="w-3 h-3" />
           </button>
           {row.image_url && (
-            <a
-              href={row.image_url}
-              download={`${row.title ?? "shot"}.jpg`}
-              onClick={(e) => e.stopPropagation()}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                downloadNodeImage(row).catch((err) => console.error("download failed", err));
+              }}
               className="px-2 py-1.5 rounded-md backdrop-blur-md text-2xs font-medium flex items-center justify-center gap-1.5 border bg-black/70 hover:bg-black/85 text-text-primary border-white/5"
               title="Download image"
             >
               <Download className="w-3 h-3" />
-            </a>
+            </button>
           )}
         </div>
       </div>

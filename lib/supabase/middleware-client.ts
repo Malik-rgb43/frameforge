@@ -13,12 +13,15 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
+          // Must mutate request cookies AND create a fresh response so Set-Cookie
+          // headers are forwarded. Creating the response inside forEach was a bug
+          // — it was being recreated on every iteration, losing previous cookies.
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
           supabaseResponse = NextResponse.next({ request });
           cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
+            supabaseResponse.cookies.set(name, value, options as Record<string, unknown>)
           );
         },
       },
