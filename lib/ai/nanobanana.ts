@@ -1,9 +1,10 @@
-// NanoBanana (Gemini Image) wrapper.
-// Generates images and reports cost so the Usage dashboard has real numbers.
+// NanoBanana — Google's native image generation API (Gemini 3 image models).
+// NanoBanana Pro   = gemini-3-pro-image-preview   (state-of-the-art quality)
+// NanoBanana 2     = gemini-3.1-flash-image-preview (high-efficiency, fast)
+// NanoBanana Flash = gemini-2.5-flash-image         (2.5 series, drafts)
 //
-// Uses gemini-2.0-flash-exp with responseModalities:["IMAGE"] for all paths.
-// Aspect ratio is injected as a text instruction in the prompt.
-// Ref images (style lock, product) are passed as inline inlineData parts.
+// All models use generateContent + responseModalities:["IMAGE"] + imageConfig.aspectRatio.
+// Ref images are passed as inlineData parts alongside the prompt text.
 
 import { GoogleGenAI } from "@google/genai";
 import { estimateImageCost } from "./pricing";
@@ -29,14 +30,10 @@ export interface NanoBananaCallOptions {
   signal?: AbortSignal;
 }
 
-// Model tier mapping:
-// nanobanana-pro  → gemini-2.0-flash-preview-image-generation (dedicated image model, highest fidelity)
-// nanobanana-2    → gemini-2.0-flash-preview-image-generation (same, mid-tier pricing label)
-// nanobanana-flash → gemini-2.0-flash-exp (experimental, faster, for drafts)
-const MODEL_MAP: Record<string, string> = {
-  "nanobanana-pro":   "gemini-2.0-flash-preview-image-generation",
-  "nanobanana-2":     "gemini-2.0-flash-preview-image-generation",
-  "nanobanana-flash": "gemini-2.0-flash-exp",
+const MODEL_TO_API: Record<string, string> = {
+  "nanobanana-pro":   "gemini-3-pro-image-preview",
+  "nanobanana-2":     "gemini-3.1-flash-image-preview",
+  "nanobanana-flash": "gemini-2.5-flash-image",
 };
 
 let _client: GoogleGenAI | null = null;
@@ -53,7 +50,7 @@ export function isNanoBananaConfigured(): boolean {
   return !!process.env.GOOGLE_GENAI_API_KEY;
 }
 
-/** Returns true for transient errors that are safe to retry (network, 503, quota). */
+/** Returns true for transient errors that are safe to retry. */
 function isTransientError(err: unknown): boolean {
   const msg = err instanceof Error ? err.message.toLowerCase() : "";
   return (
@@ -68,39 +65,23 @@ function isTransientError(err: unknown): boolean {
   );
 }
 
-/** Aspect ratio → composition instruction appended to the prompt */
-function aspectInstruction(ar: string): string {
-  const label: Record<string, string> = {
-    "9:16": "9:16 PORTRAIT (vertical, full-bleed mobile)",
-    "16:9": "16:9 LANDSCAPE (horizontal, widescreen)",
-    "1:1": "1:1 SQUARE (equal width and height)",
-    "4:5": "4:5 PORTRAIT (Instagram feed)",
-    "3:4": "3:4 PORTRAIT",
-  };
-  return `\n\nCOMPOSITION RATIO: ${label[ar] ?? ar} — generate the image in this exact aspect ratio. All composition and framing must fill this ratio with no letterboxing.`;
-}
-
 async function callNanaBananaOnce(
   prompt: string,
   opts: NanoBananaCallOptions,
   started: number
 ): Promise<NanoBananaResult> {
   const modelId = opts.modelId ?? "nanobanana-pro";
-  const apiModel = MODEL_MAP[modelId] ?? MODEL_MAP["nanobanana-pro"];
+  const apiModel = MODEL_TO_API[modelId] ?? MODEL_TO_API["nanobanana-pro"];
 
-  // Abort early if caller already cancelled
   if (opts.signal?.aborted) {
     throw new Error("NanaBanana call aborted before start");
   }
 
   const client = getClient();
 
-  // Build prompt + aspect ratio instruction
-  const fullPrompt = prompt + aspectInstruction(opts.aspectRatio ?? "9:16");
-
-  // Build content parts: prompt text first, then ref images
+  // Content parts: prompt text + optional ref images (up to 4)
   const parts: Array<{ text?: string; inlineData?: { data: string; mimeType: string } }> = [
-    { text: fullPrompt },
+    { text: prompt },
   ];
   if (opts.refImages) {
     for (const ref of opts.refImages.slice(0, 4)) {
@@ -108,21 +89,27 @@ async function callNanaBananaOnce(
     }
   }
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const config: any = {
+    responseModalities: ["IMAGE"],
+    imageConfig: {
+      aspectRatio: opts.aspectRatio ?? "9:16",
+    },
+    ...(opts.seed != null ? { seed: opts.seed } : {}),
+  };
+
   const response = await client.models.generateContent({
     model: apiModel,
     contents: [{ role: "user", parts }],
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    config: { responseModalities: ["IMAGE"] } as any,
+    config,
   });
 
   const candidate = response.candidates?.[0];
   const imagePart = candidate?.content?.parts?.find((p) => p.inlineData);
   if (!imagePart?.inlineData?.data) {
-    // Sometimes the model returns text describing the image instead of the image itself.
-    // Log the text for debugging and surface a clear error.
     const textPart = candidate?.content?.parts?.find((p) => p.text);
-    const hint = textPart?.text ? ` Model returned text: "${textPart.text.slice(0, 200)}"` : "";
-    throw new Error(`NanoBanana returned no image.${hint}`);
+    const hint = textPart?.text ? ` Model said: "${textPart.text.slice(0, 200)}"` : "";
+    throw new Error(`NanoBanana returned no image (model: ${apiModel}).${hint}`);
   }
 
   return {
@@ -145,8 +132,6 @@ export async function callNanoBanana(
   try {
     return await callNanaBananaOnce(prompt, opts, started);
   } catch (firstErr) {
-    // 1 retry for transient errors (network hiccup, 503, quota backoff).
-    // Non-transient errors (bad key, invalid prompt, "returned no image") are NOT retried.
     if (isTransientError(firstErr) && !opts.signal?.aborted) {
       await new Promise((r) => setTimeout(r, 2000));
       return await callNanaBananaOnce(prompt, opts, started);
