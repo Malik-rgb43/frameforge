@@ -16,6 +16,8 @@ import {
   Save,
   ImagePlus,
   XCircle,
+  Link2,
+  Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -37,6 +39,8 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
   const [brief, setBrief] = useState<ProjectBrief>(EMPTY_BRIEF);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<number | null>(null);
+  const [scraping, setScraping] = useState(false);
+  const [scrapeError, setScrapeError] = useState<string | null>(null);
   const uploadingRef = useRef(false);
 
   useEffect(() => {
@@ -110,6 +114,40 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
     setField("product_images", imgs);
   };
 
+  const fetchFromUrl = async () => {
+    const url = brief.productUrl?.trim();
+    if (!url || scraping) return;
+    setScraping(true);
+    setScrapeError(null);
+    try {
+      const res = await fetch("/api/scrape-product", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ url }),
+      });
+      const body = (await res.json()) as { data?: Record<string, unknown>; error?: string };
+      if (!res.ok || body.error) {
+        setScrapeError(body.error ?? "Failed to fetch page");
+        return;
+      }
+      const d = body.data ?? {};
+      setBrief((prev) => ({
+        ...prev,
+        productName: (d.productName as string) || prev.productName,
+        productCategory: (d.productCategory as string) || prev.productCategory,
+        productDescription: (d.productDescription as string) || prev.productDescription,
+        brandVoice: (d.brandVoice as string) || prev.brandVoice,
+        brandValues: (d.brandValues as string[])?.length ? (d.brandValues as string[]) : prev.brandValues,
+        productReviews: (d.productReviews as string) || prev.productReviews,
+        competitors: (d.competitors as string[])?.length ? (d.competitors as string[]) : prev.competitors,
+      }));
+    } catch (err) {
+      setScrapeError(err instanceof Error ? err.message : "Network error");
+    } finally {
+      setScraping(false);
+    }
+  };
+
   const completeness = briefCompleteness(brief);
   const completenessPct = Math.round(completeness * 100);
 
@@ -168,6 +206,46 @@ export default function BriefPanel({ open, onClose, project, onSaved }: Props) {
             <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-5">
               {/* Product */}
               <Section icon={Package} label="What you're selling">
+                {/* Product URL — auto-fill from page */}
+                <Field label="Product page URL">
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Link2 className="absolute top-1/2 -translate-y-1/2 left-3 w-3.5 h-3.5 text-text-muted" />
+                      <input
+                        type="url"
+                        value={brief.productUrl ?? ""}
+                        onChange={(e) => setField("productUrl", e.target.value)}
+                        placeholder="https://your-store.com/product-page"
+                        dir="ltr"
+                        className="w-full h-9 bg-canvas border border-border-subtle rounded-md pl-9 pr-3 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:ring-1 focus:ring-accent-warm/40"
+                      />
+                    </div>
+                    <button
+                      onClick={fetchFromUrl}
+                      disabled={scraping || !brief.productUrl?.trim()}
+                      title="Fetch product info from page"
+                      className={cn(
+                        "h-9 px-3 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all flex-shrink-0",
+                        scraping || !brief.productUrl?.trim()
+                          ? "bg-white/5 text-text-muted cursor-not-allowed"
+                          : "bg-accent-warm/15 border border-accent-warm/30 text-accent-warm hover:bg-accent-warm/25"
+                      )}
+                    >
+                      {scraping ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      ) : (
+                        <Sparkles className="w-3.5 h-3.5" />
+                      )}
+                      {scraping ? "Fetching…" : "Auto-fill"}
+                    </button>
+                  </div>
+                  {scrapeError && (
+                    <p className="text-2xs text-red-400 mt-1">{scrapeError}</p>
+                  )}
+                  <p className="text-[9px] text-text-muted mt-0.5">
+                    Paste your product page — AI reads it and fills name, description, brand voice & reviews.
+                  </p>
+                </Field>
                 <Field label="Product name" required filled={!!brief.productName}>
                   <Input
                     value={brief.productName}

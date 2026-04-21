@@ -38,6 +38,9 @@ export interface ProjectBrief {
 
   // Product hero images — uploaded once, used as ref in every generation
   product_images?: string[];
+
+  // Product page URL — paste once, AI scrapes and auto-fills the brief fields
+  productUrl?: string;
 }
 
 export const EMPTY_BRIEF: ProjectBrief = {

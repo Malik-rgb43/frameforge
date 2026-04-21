@@ -375,6 +375,7 @@ ${shotSummary}
 
 Write the concept brief. Prose only.`,
         responseMimeType: "text/plain",
+        model: "gemini-3-flash",
         action: "concept-card.brief",
       }),
     });
@@ -435,6 +436,7 @@ ${shotList}
 
 Write the complete editorial brief. Be highly specific and actionable.`,
         responseMimeType: "text/plain",
+        model: "gemini-3-flash",
         action: "concept-card.editorial-brief",
       }),
     });

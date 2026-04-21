@@ -5,6 +5,7 @@ import { useCanvas } from "@/features/canvas/store";
 import { internalFetch } from "@/lib/api";
 import { getDataAdapter } from "@/lib/data-adapter";
 import type { EdgeRow, NodeRow } from "@/lib/supabase/types";
+import { getBriefText, getBriefProductImages } from "@/lib/ai/brief-context";
 
 const uid = () =>
   typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -103,14 +104,23 @@ export async function createContinuation(
     } as EdgeRow);
   }
 
-  // Build prompt with continuity directive
-  const prompt = `${node.prompt_enhanced}\n\nOriginal concept: ${node.prompt}`;
+  // Build prompt with continuity directive + project brief context
+  const briefCtx = getBriefText();
+  const prompt = [
+    briefCtx ? `${briefCtx}\n\n` : "",
+    node.prompt_enhanced,
+    `\n\nOriginal concept: ${node.prompt}`,
+  ].join("");
 
-  // Collect parent image as slot-1 reference for identity lock
+  // Collect refs: parent image (slot-1 identity lock) + brief product images (slot-2+)
   const refImages: Array<{ base64: string; mimeType: string }> = [];
   if (parent.image_url) {
     const parentImg = await fetchImageAsBase64(parent.image_url);
     if (parentImg) refImages.push(parentImg);
+  }
+  const briefProductRefs = getBriefProductImages();
+  for (const ref of briefProductRefs) {
+    if (refImages.length < 4) refImages.push(ref);
   }
 
   // Generate via NanoBanana

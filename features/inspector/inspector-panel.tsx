@@ -1,5 +1,6 @@
 "use client";
 import { internalFetch } from "@/lib/api";
+import { getBriefText } from "@/lib/ai/brief-context";
 import { useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
 import {
@@ -547,10 +548,11 @@ function AnimationTab({ node }: { node: NodeRow }) {
         body: JSON.stringify({
           systemPrompt: `You are a cinematographer writing image-to-video motion prompts. Output JSON only:
 {"motionPrompt":"string under 60 words","modelHint":"kling-3|runway-gen3|seedance-2|sora|any","durationSeconds":3,"pacing":"slow|medium|punchy","finalBeat":"1 sentence"}
-Motion-only language. No describing the still image. End with a clear final beat.`,
-          userPrompt: `Shot: "${node.title ?? "untitled"}"\nDescription: ${node.prompt ?? "(none)"}\nTarget model: ${model}\nWrite the motion prompt. JSON only.`,
+Motion-only language. No describing the still image. End with a clear final beat.
+A PROJECT BRIEF may appear in the user message — use the product, brand voice, and campaign goal to shape the motion's emotional tone and pacing.`,
+          userPrompt: `${getBriefText() ? `${getBriefText()}\n\n` : ""}Shot: "${node.title ?? "untitled"}"\nDescription: ${node.prompt ?? "(none)"}\nTarget model: ${model}\nWrite the motion prompt. JSON only.`,
           responseMimeType: "application/json",
-          model: "gemini-3-pro",
+          model: "gemini-3-flash",
           action: "motion.generate",
           nodeId: node.id,
         }),

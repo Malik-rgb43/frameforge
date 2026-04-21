@@ -50,6 +50,7 @@ No prose, no fences.${briefCtx ? `\n\n${briefCtx}` : ""}`;
           systemPrompt,
           userPrompt,
           responseMimeType: "application/json",
+          model: "gemini-3-flash",
           action: "concept.from-brief",
         }),
       });

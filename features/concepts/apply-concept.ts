@@ -1,6 +1,6 @@
-import { internalFetch } from "@/lib/api";
 // Apply concept → auto-build a board with source images + shots + edges.
-
+import { internalFetch } from "@/lib/api";
+import { getBriefText, getBriefProductImages } from "@/lib/ai/brief-context";
 import { useCanvas } from "@/features/canvas/store";
 import { useConcepts, type ConceptUI } from "./store";
 import { getDataAdapter } from "@/lib/data-adapter";
@@ -162,15 +162,22 @@ async function generateShotImage(
   concept: ConceptUI,
   index: number
 ): Promise<string | null> {
-  const prompt = `${concept.visualSpine}
+  const briefCtx = getBriefText();
+  const purpose = (shot.metadata as { purpose?: string } | null)?.purpose ?? "shot";
 
-Shot ${index + 1} of ${concept.shotCount} for "${concept.title}".
-Hook archetype: ${concept.hookArchetype}.
-Palette: ${concept.palette.join(", ")}.
-Mood: ${concept.moodKeywords.join(", ")}.
-Purpose: ${(shot.metadata as { purpose?: string } | null)?.purpose ?? "shot"}.
+  const prompt = [
+    briefCtx ? `${briefCtx}\n\n` : "",
+    `DIRECT-RESPONSE AD STILL — ORIGINAL CREATIVE CONCEPT`,
+    `Shot ${index + 1} of ${concept.shotCount}: ${concept.title}`,
+    `SCENE: ${concept.visualSpine}`,
+    `SHOT ROLE: ${purpose} — ${index === 0 ? "hook frame, must stop the scroll in <0.5s" : "story/product beat"}`,
+    `Hook archetype: ${concept.hookArchetype}`,
+    `Palette: ${concept.palette.join(", ")} | Mood: ${concept.moodKeywords.join(", ")}`,
+    `PRODUCTION STANDARDS: photorealistic commercial photography, 35mm film texture, shallow depth of field, single focal point, no stock-photo clichés.`,
+  ].filter(Boolean).join("\n");
 
-Photorealistic cinematic, 35mm film feel, analog grain, shallow depth of field, single focal point, commercial polish.`;
+  // Inject product images from brief as visual reference
+  const refImages = getBriefProductImages();
 
   const res = await internalFetch("/api/nanobanana", {
     method: "POST",
@@ -179,6 +186,7 @@ Photorealistic cinematic, 35mm film feel, analog grain, shallow depth of field, 
       prompt,
       modelId: "nanobanana-pro",
       aspectRatio: "9:16",
+      refImages: refImages.length > 0 ? refImages : undefined,
       action: "concept.apply-shot",
       nodeId: shot.id,
     }),
