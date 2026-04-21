@@ -9,6 +9,19 @@ interface AuthState {
   loading: boolean;
 }
 
+const CACHE_KEY = "ff_workspace_id";
+
+function getCachedWorkspaceId(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(CACHE_KEY);
+}
+
+function setCachedWorkspaceId(id: string | null) {
+  if (typeof window === "undefined") return;
+  if (id) localStorage.setItem(CACHE_KEY, id);
+  else localStorage.removeItem(CACHE_KEY);
+}
+
 const AuthContext = createContext<AuthState>({ user: null, workspaceId: null, loading: true });
 
 export function useAuth() {
@@ -18,7 +31,6 @@ export function useAuth() {
 async function ensureWorkspace(userId: string): Promise<string | null> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const sb = createClient() as any;
-  // Find existing workspace
   const { data: members } = await sb
     .from("workspace_members")
     .select("workspace_id")
@@ -28,7 +40,6 @@ async function ensureWorkspace(userId: string): Promise<string | null> {
 
   if (members?.workspace_id) return members.workspace_id as string;
 
-  // Create workspace for this user
   const { data: ws, error: wsErr } = await sb
     .from("workspaces")
     .insert({ name: "My Workspace", owner_user_id: userId })
@@ -47,20 +58,40 @@ async function ensureWorkspace(userId: string): Promise<string | null> {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>({ user: null, workspaceId: null, loading: true });
+  // Initialise from localStorage cache — eliminates skeleton on repeat visits
+  const [state, setState] = useState<AuthState>(() => {
+    const cached = getCachedWorkspaceId();
+    return { user: null, workspaceId: cached, loading: !cached };
+  });
 
   useEffect(() => {
     const sb = createClient();
 
-    // onAuthStateChange fires INITIAL_SESSION immediately on mount (covers the
-    // getSession path too), so we only need one handler to avoid calling
-    // ensureWorkspace twice and causing duplicate dashboard refreshes.
     const { data: { subscription } } = sb.auth.onAuthStateChange(async (_event, session) => {
       if (!session?.user) {
+        setCachedWorkspaceId(null);
         setState({ user: null, workspaceId: null, loading: false });
         return;
       }
+
+      // If we already have a cached workspaceId, resolve loading immediately
+      // while workspace is re-validated in the background.
+      const cached = getCachedWorkspaceId();
+      if (cached) {
+        setState({ user: session.user, workspaceId: cached, loading: false });
+        // Re-validate silently — update if it ever changes
+        ensureWorkspace(session.user.id).then((id) => {
+          if (id && id !== cached) {
+            setCachedWorkspaceId(id);
+            setState((s) => ({ ...s, workspaceId: id }));
+          }
+        });
+        return;
+      }
+
+      // First-ever load: fetch workspace, then cache it
       const workspaceId = await ensureWorkspace(session.user.id);
+      setCachedWorkspaceId(workspaceId);
       setState({ user: session.user, workspaceId, loading: false });
     });
 

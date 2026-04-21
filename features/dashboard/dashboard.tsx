@@ -36,7 +36,7 @@ export default function Dashboard() {
   const { workspaceId, loading: authLoading } = useAuth();
 
   const [projects, setProjects] = useState<ProjectCard[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(!!workspaceId);
   const [view, setView] = useState<ViewMode>("grid");
   const [query, setQuery] = useState("");
   const [wizardOpen, setWizardOpen] = useState(false);
