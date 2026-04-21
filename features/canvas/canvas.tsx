@@ -175,29 +175,29 @@ function CanvasInner() {
   // Rebuilding position/style causes React Flow to re-measure and jump the viewport.
   useEffect(() => {
     setRfNodes((prev) => {
-      if (draggingRef.current) return prev; // skip during drag — RF owns position
+      const isDragging = draggingRef.current;
       const currentSelected = useCanvas.getState().selectedNodeIds;
       const prevMap = new Map(prev.map((n) => [n.id, n]));
       const next = nodeRows.map((row) => {
         const existing = prevMap.get(row.id);
         if (existing) {
-          // Only update data and type — keep position/style from RF's own state
-          // to avoid viewport jumps when only metadata changed
+          // Always update data/type so metadata changes render live.
+          // During drag: skip position/size sync so RF owns position smoothly.
           return {
             ...existing,
             type: row.type,
             data: { row },
             selected: existing.selected ?? currentSelected.includes(row.id),
-            // Update position/size only if the store value actually differs
-            ...(existing.position.x !== row.x || existing.position.y !== row.y
+            // Update position/size only when NOT dragging and value actually differs
+            ...(!isDragging && (existing.position.x !== row.x || existing.position.y !== row.y)
               ? { position: { x: row.x, y: row.y } }
               : {}),
-            ...(Number(existing.style?.width) !== row.w
+            ...(!isDragging && Number(existing.style?.width) !== row.w
               ? { style: { ...existing.style, width: row.w, height: row.h } }
               : {}),
           };
         }
-        // New node — create fresh
+        // New node — always create fresh, even during a drag
         return {
           ...toRfNodes([row])[0],
           selected: currentSelected.includes(row.id),

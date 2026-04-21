@@ -111,7 +111,8 @@ export default function ConceptCardNode({
     });
     try {
       await generateWorkflow(row.id, { signal: ctrl.signal });
-      window.dispatchEvent(new Event("ff:fit-view"));
+      // Delay so React commits final node updates before fitView calculates bounds
+      setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 120);
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Generation failed";
       if (msg !== "aborted" && !ctrl.signal.aborted) setGenError(msg);

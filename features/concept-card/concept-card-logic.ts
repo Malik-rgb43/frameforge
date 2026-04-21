@@ -593,6 +593,12 @@ export async function generateWorkflow(
     }
   }
 
+  // 3.5 Snap viewport to show the new shot stubs immediately (before waiting for images)
+  // Use a short delay so React has time to commit the upsertNode updates to the DOM.
+  if (typeof window !== "undefined") {
+    setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
+  }
+
   // 4. Generate images per shot (sequentially, with mock fallback)
   for (let i = 0; i < createdShots.length; i++) {
     if (options?.signal?.aborted) break;
