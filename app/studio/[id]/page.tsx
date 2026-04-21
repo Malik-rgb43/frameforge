@@ -81,31 +81,79 @@ export default function StudioPage({ params }: { params: { id: string } }) {
 
   useEffect(() => {
     let active = true;
+    const resolvedId = params.id === "demo" ? "proj_demo" : params.id;
+
     (async () => {
       setLoading(true);
       const adapter = await getDataAdapter();
-      const proj = await adapter.getProject(
-        params.id === "demo" ? "proj_demo" : params.id
-      );
+
+      // ── Fast path: use cached board_id to skip project→boards round trips ──
+      // On every successful load we store `ff.board.<projectId>` in localStorage.
+      // On refresh we fire nodes+edges immediately (1 round trip vs 3 sequential).
+      const BOARD_CACHE_KEY = `ff.board.${resolvedId}`;
+      const cachedBoardId = typeof window !== "undefined"
+        ? localStorage.getItem(BOARD_CACHE_KEY)
+        : null;
+
+      // Also restore project from sessionStorage so TopBar renders instantly
+      const cachedProjRaw = typeof window !== "undefined"
+        ? sessionStorage.getItem("ff.active.project")
+        : null;
+      if (cachedProjRaw) {
+        try {
+          const cachedProj = JSON.parse(cachedProjRaw) as Project;
+          if (cachedProj.id === resolvedId) setProject(cachedProj);
+        } catch { /* ignore */ }
+      }
+
+      // Fire nodes+edges immediately if we know the board_id
+      let fastLoaded = false;
+      if (cachedBoardId) {
+        try {
+          const [nds, eds] = await Promise.all([
+            adapter.listNodes(cachedBoardId),
+            adapter.listEdges(cachedBoardId),
+          ]);
+          if (!active) return;
+          setBoard(cachedBoardId, nds, eds);
+          setLoading(false);
+          fastLoaded = true;
+          if (nds.length > 0 && typeof window !== "undefined") {
+            const hasSaved = !!localStorage.getItem(`ff.vp.${cachedBoardId}`);
+            if (!hasSaved) setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
+          }
+        } catch {
+          // Fast path failed — fall through to full load below
+        }
+      }
+
+      // ── Always fetch project + boards in background to keep data fresh ──
+      const proj = await adapter.getProject(resolvedId);
       if (!active || !proj) {
-        if (active) setLoading(false);
+        if (active && !fastLoaded) setLoading(false);
         return;
       }
       setProject(proj);
-      // Cache active project in sessionStorage for AI calls to pull brief
       if (typeof window !== "undefined") {
-        try {
-          sessionStorage.setItem("ff.active.project", JSON.stringify(proj));
-        } catch {
-          /* ignore quota */
-        }
+        try { sessionStorage.setItem("ff.active.project", JSON.stringify(proj)); } catch { /* quota */ }
       }
+
       const boards = await adapter.listBoards(proj.id);
       const board = boards[0];
       if (!board) {
-        setLoading(false);
+        if (!fastLoaded) setLoading(false);
         return;
       }
+
+      // Cache board_id for next refresh
+      if (typeof window !== "undefined") {
+        try { localStorage.setItem(BOARD_CACHE_KEY, board.id); } catch { /* quota */ }
+      }
+
+      // If fast path already loaded this exact board, skip the full reload
+      if (fastLoaded && board.id === cachedBoardId) return;
+
+      // Slow path: board changed or no cache — load nodes+edges now
       const [nds, eds] = await Promise.all([
         adapter.listNodes(board.id),
         adapter.listEdges(board.id),
@@ -113,18 +161,12 @@ export default function StudioPage({ params }: { params: { id: string } }) {
       if (!active) return;
       setBoard(board.id, nds, eds);
       setLoading(false);
-      // Auto-fit to loaded nodes only if no saved viewport exists for this board
       if (nds.length > 0 && typeof window !== "undefined") {
         const hasSaved = !!localStorage.getItem(`ff.vp.${board.id}`);
-        if (!hasSaved) {
-          // Small delay so ReactFlow has processed the new nodes before fitView
-          setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
-        }
+        if (!hasSaved) setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
       }
     })();
-    return () => {
-      active = false;
-    };
+    return () => { active = false; };
   }, [params.id, setBoard]);
 
   const handleToolPick = useCallback(
