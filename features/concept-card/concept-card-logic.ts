@@ -77,7 +77,7 @@ export async function createConceptCard(position?: {
   const state = useCanvas.getState();
   if (!state.boardId) throw new Error("no board");
 
-  const pos = position ?? findFreeSpot(state.nodes);
+  const pos = position ?? (state.boardId ? getViewportCenter(state.boardId) : findFreeSpot(state.nodes));
   const now = new Date().toISOString();
   const input: NodeInput = {
     board_id: state.boardId,
@@ -124,6 +124,24 @@ function findFreeSpot(nodes: NodeRow[]): { x: number; y: number } {
   if (nodes.length === 0) return { x: 120, y: 80 };
   const maxY = nodes.reduce((m, n) => Math.max(m, n.y + n.h), 0);
   return { x: 120, y: maxY + 48 };
+}
+
+/** Read the current viewport from localStorage and return its center in flow coords. */
+function getViewportCenter(boardId: string): { x: number; y: number } {
+  try {
+    if (typeof window === "undefined") return { x: 120, y: 80 };
+    const saved = localStorage.getItem(`ff.vp.${boardId}`);
+    if (!saved) return { x: 120, y: 80 };
+    const vp = JSON.parse(saved) as { x: number; y: number; zoom: number };
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    const cx = (-vp.x + w / 2) / vp.zoom;
+    const cy = (-vp.y + h / 2) / vp.zoom;
+    // Centre the card (320×240) at the viewport centre
+    return { x: cx - 160, y: cy - 120 };
+  } catch {
+    return { x: 120, y: 80 };
+  }
 }
 
 // ─────────────────────────────────────────────────────────
@@ -331,13 +349,27 @@ MANDATORY PHYSICS/REALITY RULES:
 ✗ NEVER use vague words: "beautiful", "cluttered", "messy" — name the SPECIFIC objects
 ✗ Last shot (CTA/packshot): right third of frame intentionally empty, clean neutral background — space for logo
 
+═══ LITERAL VISUAL STORYTELLING ═══
+The concept idea contains narrative metaphors. Your job: turn EVERY metaphor into a PHYSICAL, SHOOTABLE, LITERAL SCENE.
+
+Translation rules:
+- "stealing attention" → show a character dressed dramatically in black gloves and a tailored coat, reaching their hand into a crowded room and physically taking a glowing object from a pedestal
+- "breaking through barriers" → show a person physically punching through a paper wall or stepping through a cracked surface
+- "the secret ritual" → show literal hands performing a specific, unusual, detailed physical action in a private space
+- "commanding the room" → show a person standing on an elevated surface, all other people's heads turned toward them
+- "a new chapter" → show hands physically turning the page of a large, worn leather book, dust motes visible
+
+RULE: If the concept says something — SHOW IT. Don't interpret emotionally. Translate LITERALLY into physical objects, characters, and actions. The image model cannot read metaphor — give it a concrete scene.
+
 EXAMPLES — BAD (reject immediately):
 ❌ "Products flying everywhere symbolizing grooming chaos with timer counting down"
 ❌ "Woman feeling liberated, beauty products swirling around her in a whirlwind"
+❌ "Shot showing the feeling of freedom and possibility" (no physical description)
 
 EXAMPLES — GOOD (write exactly like this):
 ✓ "Extreme close-up, macro 100mm: a woman's right wrist, bare skin, forearm horizontal across frame. A glass perfume bottle with gold cap held in her left hand tilts and touches the inside of the wrist. Amber liquid visible inside bottle, catching warm window light from the right. Background: heavily blurred white marble surface. The glass stopper catches light and creates a small golden flare."
 ✓ "Telephoto 85mm, static locked: a young woman in a dark turtleneck, sitting at a white marble kitchen counter, both hands flat on the surface, head slightly bowed. Morning light from a window behind her left shoulder. White subway tile wall in soft focus. A compact electric shaver rests on the counter 30cm in front of her hands, centered."
+✓ "Medium shot, 35mm, low angle: a figure in a black fitted coat and thin leather gloves stands at a glass display case in a dark gallery. The case is open. Their right hand is extended, fingertips curled around a luminous glass sphere that glows amber from within. Other display cases visible in the background, all intact. The one being touched is the only lit object in the frame."
 
 ═══ REMAINING FIELDS ═══
 - title: 3-5 words capturing the emotional beat (for the editor, not the image model)
@@ -591,11 +623,24 @@ export async function generateWorkflow(
 
   // 3. Create shot nodes from the AI's response — now we know the real count
   const freshCard = useCanvas.getState().nodes.find((n) => n.id === conceptCardId) ?? card;
-  const SHOT_W = 200;
-  const SHOT_H = 280;
-  const GAP = 20;
-  const startX = freshCard.x;
-  const startY = freshCard.y + (freshCard.h ?? 240) + 80;
+
+  // Aspect-aware shot dimensions
+  const SHOT_DIMS: Record<string, [number, number]> = {
+    "9:16":  [180, 320],
+    "16:9":  [320, 180],
+    "1:1":   [240, 240],
+    "4:5":   [200, 250],
+    "3:4":   [200, 267],
+  };
+  const [SHOT_W, SHOT_H] = SHOT_DIMS[aspect] ?? [180, 320];
+  const GAP = 24;
+  const MAX_COLS = 5;
+
+  // Layout: concept card on the LEFT, shots on the RIGHT
+  const CARD_W = freshCard.w ?? 320;
+  const SECTION_GAP = 80; // gap between card column and shots column
+  const startX = freshCard.x + CARD_W + SECTION_GAP;
+  const startY = freshCard.y;
 
   const createdShots: NodeRow[] = [];
   for (let i = 0; i < shots.length; i++) {
@@ -604,8 +649,8 @@ export async function generateWorkflow(
       board_id: state.boardId,
       group_id: group.id,
       type: i === 0 ? "shot" : "continuation",
-      x: startX + i * (SHOT_W + GAP),
-      y: startY,
+      x: startX + (i % MAX_COLS) * (SHOT_W + GAP),
+      y: startY + Math.floor(i / MAX_COLS) * (SHOT_H + GAP),
       w: SHOT_W,
       h: SHOT_H,
       order_index: state.nodes.length + i,
@@ -786,16 +831,16 @@ export async function generateWorkflow(
   // 4.5 Generate editorial brief note card
   const editorialBrief = await generateEditorialBrief(idea, shots, aspect, durationSec);
 
-  // Create a note node to the right of the shots row
-  const lastShot = createdShots[createdShots.length - 1];
+  // Create a note node below the shot grid
   const NOTE_W = 320;
   const NOTE_H = 480;
+  const totalRows = Math.ceil(shots.length / MAX_COLS);
   const noteInput: NodeInput = {
     board_id: state.boardId,
     group_id: group.id,
     type: "note",
-    x: lastShot ? lastShot.x + lastShot.w + 40 : startX + shots.length * (SHOT_W + GAP) + 40,
-    y: startY,
+    x: startX,
+    y: startY + totalRows * (SHOT_H + GAP) + 40,
     w: NOTE_W,
     h: NOTE_H,
     order_index: state.nodes.length + shots.length,
