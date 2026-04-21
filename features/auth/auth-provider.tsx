@@ -29,9 +29,10 @@ export function useAuth() {
 }
 
 // Timeout wrapper — returns null instead of throwing so callers stay alive.
+// .catch(() => null) ensures network errors also resolve to null, not reject.
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
-    promise,
+    promise.catch(() => null),
     new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
   ]);
 }
