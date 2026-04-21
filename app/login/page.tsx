@@ -1,12 +1,24 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 
 type Mode = "signin" | "signup";
 
-export default function LoginPage() {
+// useSearchParams() requires a Suspense boundary in Next.js 14.
+// We wrap the actual form in a named component and export a Suspense wrapper.
+export default function LoginPageWrapper() {
+  return (
+    <Suspense fallback={<div className="min-h-screen bg-canvas" />}>
+      <LoginPage />
+    </Suspense>
+  );
+}
+
+function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const nextPath = searchParams.get("next") ?? "/";
   const [mode, setMode] = useState<Mode>("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -27,12 +39,14 @@ export default function LoginPage() {
         if (signUpError) throw signUpError;
         const { error: signInError } = await sb.auth.signInWithPassword({ email, password });
         if (signInError) throw signInError;
-        router.push("/");
+        console.log("[login] signup+signin success, redirecting to", nextPath);
+        router.push(nextPath);
         router.refresh();
       } else {
         const { error } = await sb.auth.signInWithPassword({ email, password });
         if (error) throw error;
-        router.push("/");
+        console.log("[login] signin success, redirecting to", nextPath);
+        router.push(nextPath);
         router.refresh();
       }
     } catch (err: unknown) {
