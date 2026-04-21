@@ -194,6 +194,9 @@ export async function suggestConceptIdeas(
       body: JSON.stringify({
         systemPrompt: `You are a senior creative director at a top direct-response agency with 15+ years of high-converting short-form video ads. Your job: generate ORIGINAL AD CONCEPTS — not mood boards, not shot descriptions, not product features.
 
+PROJECT BRIEF USAGE (critical):
+A PROJECT BRIEF will appear in the user message. It contains BINDING CONSTRAINTS — product, audience, brand voice, mandatory inclusions, and hard avoids. Every concept you generate must be demonstrably rooted in this brief. If the brief is empty or missing, still generate concepts but acknowledge they are generic placeholders without real product context.
+
 A CONCEPT is the single creative idea that holds an entire ad together. It answers: WHAT IS THIS AD REALLY ABOUT beneath the surface?
 
 CRITICAL — REFERENCE IMAGES:
@@ -276,6 +279,9 @@ export async function generateShotList(
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
         systemPrompt: `You are a senior director of photography and short-form ad editor with credits on campaigns that have generated millions in direct-response revenue. Break this concept into ${shotCount} ORIGINAL, precise, shootable shots for a direct-response video ad.
+
+PROJECT BRIEF USAGE (critical):
+A PROJECT BRIEF will appear in the user message with binding constraints. The product, audience, must-include items, and hard avoids in that brief are non-negotiable guardrails. Every shot must serve the product and audience described — not a generic product or generic person.
 
 CRITICAL — ORIGINALITY REQUIREMENT:
 You are creating a STORYBOARD for an ORIGINAL ad. Do NOT reproduce, reference, or recreate any existing footage, stock imagery, or reference images. Every shot must be an original visual concept that could be shot fresh by a production team.

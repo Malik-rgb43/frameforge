@@ -55,48 +55,58 @@ export const EMPTY_BRIEF: ProjectBrief = {
   mustAvoid: [],
 };
 
-// Stringify a brief for injection into an AI prompt
+// Stringify a brief for injection into an AI prompt.
+// Returns a block that acts as a HARD CONSTRAINT, not just soft context.
 export function briefAsContext(brief: ProjectBrief): string {
   const parts: string[] = [];
-  if (brief.productName) parts.push(`PRODUCT: ${brief.productName}`);
+
+  if (brief.productName) parts.push(`PRODUCT NAME: ${brief.productName}`);
   if (brief.productCategory) parts.push(`CATEGORY: ${brief.productCategory}`);
   if (brief.productDescription)
-    parts.push(`PRODUCT DETAIL: ${brief.productDescription}`);
+    parts.push(`PRODUCT: ${brief.productDescription}`);
 
   if (brief.audienceName || brief.audienceContext) {
     parts.push(
-      `AUDIENCE: ${brief.audienceName}${
+      `TARGET AUDIENCE: ${brief.audienceName}${
         brief.audienceContext ? ` — ${brief.audienceContext}` : ""
-      } (awareness: ${brief.audienceAwareness})`
+      }`
     );
+    parts.push(`AUDIENCE AWARENESS LEVEL: ${brief.audienceAwareness} — adjust the concept's starting point accordingly. Unaware = lead with problem/emotion, not product. Most-aware = lead with differentiator.`);
   }
 
-  if (brief.brandVoice) parts.push(`BRAND VOICE: ${brief.brandVoice}`);
+  if (brief.brandVoice) parts.push(`BRAND VOICE: ${brief.brandVoice} — every line of copy and every visual choice must feel like this voice.`);
   if (brief.brandValues.length)
-    parts.push(`BRAND VALUES: ${brief.brandValues.join(", ")}`);
+    parts.push(`BRAND VALUES (must be felt, not stated): ${brief.brandValues.join(", ")}`);
 
   if (brief.goal) parts.push(`CAMPAIGN GOAL: ${brief.goal}`);
   if (brief.placements.length)
-    parts.push(`PLACEMENTS: ${brief.placements.join(", ")}`);
+    parts.push(`PLACEMENTS: ${brief.placements.join(", ")} — optimize pacing and format for these platforms.`);
 
   if (brief.mustInclude.length)
-    parts.push(`MUST INCLUDE: ${brief.mustInclude.join("; ")}`);
+    parts.push(`MANDATORY INCLUSIONS (non-negotiable): ${brief.mustInclude.join("; ")}`);
   if (brief.mustAvoid.length)
-    parts.push(`AVOID: ${brief.mustAvoid.join("; ")}`);
+    parts.push(`HARD AVOIDS (immediate disqualifier if present): ${brief.mustAvoid.join("; ")}`);
 
   if (brief.productReviews)
     parts.push(
-      `VOICE OF CUSTOMER (verbatim review excerpts):\n${brief.productReviews.slice(0, 2000)}`
+      `VOICE OF CUSTOMER — use these exact words, phrases, and emotional beats in concepts:\n${brief.productReviews.slice(0, 2000)}`
     );
 
   if (brief.competitors?.length)
     parts.push(
-      `DIFFERENTIATE FROM: ${brief.competitors.join(", ")} — do not echo their visual language.`
+      `COMPETITORS TO DIFFERENTIATE FROM: ${brief.competitors.join(", ")} — avoid their visual language, color palettes, and creative formulas entirely.`
     );
 
-  return parts.length
-    ? `─── PROJECT BRIEF ───\n${parts.join("\n")}\n─── END BRIEF ───`
-    : "";
+  if (!parts.length) return "";
+
+  return [
+    `════ PROJECT BRIEF — BINDING CREATIVE CONSTRAINTS ════`,
+    `Everything you generate MUST be grounded in this brief.`,
+    `Concepts that ignore the product, audience, or hard avoids will be rejected.`,
+    ``,
+    ...parts,
+    `════ END BRIEF ════`,
+  ].join("\n");
 }
 
 export function isBriefFilled(brief: ProjectBrief | null | undefined): boolean {
