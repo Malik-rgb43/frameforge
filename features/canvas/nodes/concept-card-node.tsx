@@ -19,13 +19,14 @@ import {
 } from "@/features/concept-card/concept-card-logic";
 import type { NodeRow } from "@/lib/supabase/types";
 
-function shotsFromDuration(sec: number): number {
-  if (sec <= 6) return 3;
-  if (sec <= 9) return 4;
-  if (sec <= 15) return 6;
-  if (sec <= 30) return 10;
-  if (sec <= 45) return 14;
-  return 18;
+/** Returns a human-readable shot range hint for a given duration. */
+function shotRangeHint(sec: number): string {
+  if (sec <= 6) return "3–5";
+  if (sec <= 9) return "4–6";
+  if (sec <= 15) return "5–8";
+  if (sec <= 30) return "7–12";
+  if (sec <= 45) return "10–14";
+  return "12–18";
 }
 
 function AspectIcon({ ratio, active }: { ratio: string; active: boolean }) {
@@ -105,7 +106,6 @@ export default function ConceptCardNode({
     saveMeta({
       idea,
       duration_sec: durationSec,
-      shot_count: shotsFromDuration(durationSec),
       aspect,
       image_model: imageModel,
     });
@@ -126,7 +126,9 @@ export default function ConceptCardNode({
   const isDone = state === "done";
   const isGen = state === "generating" || row.status === "generating";
   const canGenerate = idea.trim().length > 0 && !isGen;
-  const shotCount = shotsFromDuration(durationSec);
+  // After generation, show the real AI-decided shot count; before generation show the range
+  const aiShotCount = (meta as { shot_count?: number }).shot_count;
+  const shotDisplay = aiShotCount ? `${aiShotCount} shots` : `${shotRangeHint(durationSec)} shots`;
 
   return (
     <div
@@ -183,7 +185,7 @@ export default function ConceptCardNode({
             {/* Progress label */}
             <div className="text-center space-y-1">
               <div className="text-xs font-semibold text-text-primary">
-                Generating {shotCount} shots
+                Generating workflow…
               </div>
               <div className="text-[10px] text-text-muted">
                 Building storyboard + images…
@@ -315,9 +317,9 @@ export default function ConceptCardNode({
 
             {/* Compact controls bar */}
             <div className="flex items-center gap-2 pt-0.5">
-              {/* Shot count badge */}
+              {/* Shot count badge — range before gen, real count after */}
               <div className="text-[9px] font-mono text-accent-violet/80 px-2 py-1 rounded-md bg-accent-violet/10 border border-accent-violet/20 whitespace-nowrap">
-                {shotCount} shots
+                {shotDisplay}
               </div>
 
               <div className="flex-1" />
@@ -331,7 +333,6 @@ export default function ConceptCardNode({
                       setDurationSec(d);
                       saveMeta({
                         duration_sec: d,
-                        shot_count: shotsFromDuration(d),
                       });
                     }}
                     className={cn(
@@ -420,7 +421,7 @@ export default function ConceptCardNode({
             {isGen
               ? "Generating…"
               : canGenerate
-              ? `Generate ${shotCount} shots`
+              ? "Generate workflow"
               : "Enter an idea to generate"}
           </button>
         </div>

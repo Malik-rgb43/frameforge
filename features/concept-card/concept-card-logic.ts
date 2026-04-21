@@ -270,48 +270,63 @@ Generate exactly 4 concepts. Each must be genuinely distinct — different emoti
 
 export async function generateShotList(
   idea: string,
-  shotCount: number
+  durationSec: number   // used as a soft hint for pacing — AI decides the real count
 ): Promise<ShotSpec[]> {
   const briefCtx = await getProjectBriefContext();
+
+  // Derive a target range from duration — AI can go above/below if the concept demands it
+  const rangeHint =
+    durationSec <= 6  ? "3–5"
+    : durationSec <= 9  ? "4–6"
+    : durationSec <= 15 ? "5–8"
+    : durationSec <= 30 ? "7–12"
+    : "10–16";
+
   try {
     const res = await internalFetch("/api/gemini", {
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemPrompt: `You are a senior director of photography and short-form ad editor with credits on campaigns that have generated millions in direct-response revenue. Break this concept into ${shotCount} ORIGINAL, precise, shootable shots for a direct-response video ad.
+        systemPrompt: `You are a senior director of photography and short-form ad editor with credits on campaigns that have generated millions in direct-response revenue. Your job: break a creative concept into the EXACT number of shots this ad needs — no more, no fewer.
+
+SHOT COUNT DECISION (your creative call):
+- Target range is ${rangeHint} shots based on the duration preference. But the concept is the boss.
+- A slow-burn emotional story might need fewer shots held longer.
+- A rapid-fire energy concept might need more short punchy cuts.
+- RULE: Every shot must EARN its place. If a shot can be cut without losing the story, cut it.
+- RULE: Never pad to hit a number. Never compress a story that needs room.
 
 PROJECT BRIEF USAGE (critical):
-A PROJECT BRIEF will appear in the user message with binding constraints. The product, audience, must-include items, and hard avoids in that brief are non-negotiable guardrails. Every shot must serve the product and audience described — not a generic product or generic person.
+A PROJECT BRIEF will appear in the user message with binding constraints. The product, audience, must-include items, and hard avoids in that brief are non-negotiable guardrails. Every shot must serve the product and audience described.
 
 CRITICAL — ORIGINALITY REQUIREMENT:
-You are creating a STORYBOARD for an ORIGINAL ad. Do NOT reproduce, reference, or recreate any existing footage, stock imagery, or reference images. Every shot must be an original visual concept that could be shot fresh by a production team.
+You are creating a STORYBOARD for an ORIGINAL ad. Do NOT reproduce, reference, or recreate any existing footage or reference images. Every shot must be an original visual concept shootable by a production team.
 
 SHOT ARCHITECTURE (non-negotiable structure):
-- Shot 1 = SCROLL-STOPPER HOOK. Payoff in under 0.5 seconds. Options: extreme close-up with unexpected detail, direct confrontation with a problem the viewer recognizes, a visual mismatch that creates cognitive dissonance, an unexpected juxtaposition. NO setup, NO slow burns. If a stranger wouldn't pause their scroll for this first frame, it fails.
-- Shots 2-N-1 = THE STORY ENGINE. Narrative beats, emotional proof, problem-solution arc. Product appears in 2-3 shots maximum — the story carries the rest. Use unexpected creative vehicles: a recurring visual motif, a visual callback, a perspective shift. Each shot must EARN its edit — if it can be cut without losing the story, cut it.
-- Last shot = RESOLUTION + DESIRE. The viewer must feel: "I need this." Create this through before/after contrast, social proof framing, or a visual reward that pays off the opening hook.
+- Shot 1 = SCROLL-STOPPER HOOK. Payoff in under 0.5 seconds. Extreme close-up with unexpected detail, direct confrontation with a problem, visual mismatch, or unexpected juxtaposition. NO setup, NO slow burns.
+- Middle shots = THE STORY ENGINE. Narrative beats, emotional proof, problem-solution arc. Product appears in 2-3 shots maximum — the story carries the rest. Each shot must EARN its edit.
+- Last shot = RESOLUTION + DESIRE. The viewer must feel: "I need this." Before/after contrast, social proof framing, or a visual reward that pays off the opening hook.
 
 For EACH shot, output exactly these fields:
 - title: 3-5 word working title that captures the EMOTIONAL beat, not the visual description
 - purpose: hook | setup | tension | proof | reveal | cta
-- visualDescription: 2-3 sentences. Be a cinematographer briefing a camera operator. Name: (1) EXACTLY what fills the frame — subject, position, expression, action; (2) the specific environment detail that creates context; (3) the ONE thing in this frame the viewer will remember. FORBIDDEN: "person smiling", "product on surface", "woman looking happy", anything stock-photo-generic.
-- cameraDirective: lens focal length + camera angle + shot type + specific movement with speed. Example: "35mm, low-angle (15° off ground), wide medium — slow push-in at 2px/frame over 3s, locks off on product"
-- lightingDirective: key light source type + direction + quality (hard/soft/diffused) + color temperature + any practical lights in shot. Example: "harsh tungsten practical from above-left, 2700K, no fill — hard shadow falls left, creates isolation"
-- durationSeconds: 1–4 (TikTok/Reels: 1-2s for hook+tension; 2-3s for proof; 3-4s for reveal)
-- motionPrompt: under 60 words. Exactly: opening camera/subject state → primary movement or action → the beat it ends on. Cinematographer language ONLY. Example: "Opens locked off on extreme close of clasped hands — slow rack focus to face behind, 3 seconds — at 2s hands release, revealing product drop to table, camera holds as product settles."
+- visualDescription: 2-3 sentences. EXACTLY what fills the frame — subject, position, expression, action; the specific environment detail; the ONE thing the viewer will remember. FORBIDDEN: "person smiling", "product on surface", "woman looking happy", anything stock-photo-generic.
+- cameraDirective: lens focal length + camera angle + shot type + specific movement with speed. Example: "35mm, low-angle (15° off ground), wide medium — slow push-in at 2px/frame over 3s"
+- lightingDirective: key light source + direction + quality + color temperature. Example: "harsh tungsten from above-left, 2700K, no fill — hard shadow creates isolation"
+- durationSeconds: 1–4 (1-2s for hook+tension; 2-3s for proof/setup; 3-4s for reveal/CTA)
+- motionPrompt: under 60 words. Opening state → primary movement → ending beat. Cinematographer language only.
 
 CRAFT STANDARDS:
-- Authenticity > polish: handheld micro-shake, natural imperfect light, real textures beat studio-clean every time
-- Emotional specificity > generic beauty: the specific muscle twitch of holding back tears > "sad face"
-- Compositional tension: use negative space, off-center framing, partial reveals to create visual intrigue
-- REJECT: symmetrical "flat lay" product shots, faces without readable emotion, generic outdoor lifestyle, white-background anything
+- Authenticity > polish. Handheld micro-shake, natural imperfect light, real textures beat studio-clean.
+- Emotional specificity > generic beauty.
+- Compositional tension: negative space, off-center framing, partial reveals.
+- REJECT: flat-lay product shots, faces without readable emotion, generic outdoor lifestyle, white-background anything.
 
 Return JSON only: {"shots":[{...}]}`,
         userPrompt: `${briefCtx}
 
 CONCEPT TO EXECUTE: ${idea}
-
-Build exactly ${shotCount} shots. Shot 1 must work as a standalone scroll-stopper in the first 0.5s. Every shot must serve the concept — if it can be cut, cut it. JSON only.`,
+DURATION PREFERENCE: ${durationSec}s — use this as pacing context, but decide the shot count that best serves this concept. Shot 1 must work as a standalone scroll-stopper. Every shot earns its place. JSON only.`,
         responseMimeType: "application/json",
         action: "concept-card.shot-list",
       }),
@@ -320,17 +335,20 @@ Build exactly ${shotCount} shots. Shot 1 must work as a standalone scroll-stoppe
     const { data } = (await res.json()) as {
       data: { shots?: ShotSpec[] };
     };
-    return (data?.shots ?? []).slice(0, shotCount);
+    const shots = data?.shots ?? [];
+    if (shots.length > 0) return shots;
+    throw new Error("empty shot list");
   } catch {
-    // Fallback
-    return Array.from({ length: shotCount }).map((_, i) => ({
+    // Fallback — use range midpoint
+    const fallbackCount = Math.round(parseInt(rangeHint.split("–")[0]) + 1);
+    return Array.from({ length: fallbackCount }).map((_, i) => ({
       title: `Shot ${i + 1}`,
       visualDescription: `${idea} — beat ${i + 1}.`,
       cameraDirective: "50mm, eye-level, slow push-in",
       lightingDirective: "warm key from 45°, cool fill, soft rim",
       durationSeconds: 2,
       purpose:
-        i === 0 ? "hook" : i === shotCount - 1 ? "cta" : i === 1 ? "setup" : "reveal",
+        i === 0 ? "hook" : i === fallbackCount - 1 ? "cta" : i === 1 ? "setup" : "reveal",
       motionPrompt:
         "Slow dolly-in at 4px/frame, subject action peaks mid-clip, ends on a still locked frame ready for clean cut.",
     }));
@@ -471,13 +489,13 @@ export async function generateWorkflow(
 
   const meta = (card.metadata ?? {}) as {
     idea?: string;
-    shot_count?: number;
     aspect?: string;
     ref_image_urls?: string[];
+    duration_sec?: number;
+    image_model?: string;
   };
 
   const idea = (meta.idea ?? card.title ?? "").trim();
-  const shotCount = meta.shot_count ?? 5;
   const aspect = (meta.aspect ?? "9:16") as
     | "9:16"
     | "1:1"
@@ -535,19 +553,29 @@ export async function generateWorkflow(
   // Brief product images first (highest priority slot), then canvas mood refs
   const refImages = [...briefProductRefs, ...canvasRefs].slice(0, 4);
 
-  // 2. IMMEDIATELY lay out placeholder shot stubs on the canvas so the user
-  //    sees activity right away — BEFORE waiting for the AI shot-list call.
+  const durationSec = meta.duration_sec ?? 15;
+
+  // 2. Let AI decide the shot count — call shot list FIRST so we create the right number of nodes
+  const shots = await generateShotList(idea, durationSec);
+  const conceptBrief = await generateConceptBrief(idea, shots, durationSec);
+
+  // Save the AI-decided shot count back to the card metadata
+  state.updateNode(conceptCardId, {
+    metadata: { ...meta, concept_state: "generating", shot_count: shots.length } as import("@/lib/supabase/types").Json,
+  });
+
+  // 3. Create shot nodes from the AI's response — now we know the real count
   const freshCard = useCanvas.getState().nodes.find((n) => n.id === conceptCardId) ?? card;
   const SHOT_W = 200;
   const SHOT_H = 280;
   const GAP = 20;
   const startX = freshCard.x;
   const startY = freshCard.y + (freshCard.h ?? 240) + 80;
-  const durationSec = (meta as { duration_sec?: number }).duration_sec ?? 15;
 
   const createdShots: NodeRow[] = [];
-  for (let i = 0; i < shotCount; i++) {
-    const placeholderInput: NodeInput = {
+  for (let i = 0; i < shots.length; i++) {
+    const spec = shots[i];
+    const nodeInput: NodeInput = {
       board_id: state.boardId,
       group_id: group.id,
       type: i === 0 ? "shot" : "continuation",
@@ -558,23 +586,25 @@ export async function generateWorkflow(
       order_index: state.nodes.length + i,
       image_url: null,
       thumbnail_url: null,
-      prompt: null,
-      prompt_enhanced: null,
-      title: i === 0 ? "Hook" : `Shot ${i + 1}`,
+      prompt: spec.visualDescription,
+      prompt_enhanced: `${spec.visualDescription}\n\nCamera: ${spec.cameraDirective}\nLighting: ${spec.lightingDirective}\nPurpose: ${spec.purpose}`,
+      title: spec.title,
       status: "generating",
       quality_score: null,
       metadata: {
-        purpose: i === 0 ? "hook" : i === shotCount - 1 ? "cta" : "reveal",
+        purpose: spec.purpose,
+        durationSeconds: spec.durationSeconds,
+        animation_prompt: spec.motionPrompt,
         from_concept_card: card.id,
       },
     };
 
     let shotNode: NodeRow;
     try {
-      shotNode = await adapter.createNode(placeholderInput);
+      shotNode = await adapter.createNode(nodeInput);
     } catch {
       shotNode = {
-        ...placeholderInput,
+        ...nodeInput,
         id: uid(),
         created_at: now,
         updated_at: now,
@@ -601,29 +631,19 @@ export async function generateWorkflow(
     }
   }
 
-  // Snap viewport to show the placeholder stubs before the AI work starts
+  // Snap viewport to show all the new shot nodes
   if (typeof window !== "undefined") {
     setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
   }
 
-  // 3. Now fetch the real shot list + concept brief from AI (placeholders already visible)
-  const shots = await generateShotList(idea, shotCount);
-  const conceptBrief = await generateConceptBrief(idea, shots, durationSec);
-
-  // Update placeholder nodes with real shot data from AI
+  // Nodes already have real data — no separate update loop needed
   for (let i = 0; i < shots.length && i < createdShots.length; i++) {
-    const spec = shots[i];
     const shot = createdShots[i];
     const realData: Partial<NodeRow> = {
-      title: spec.title,
-      prompt: spec.visualDescription,
-      prompt_enhanced: `${spec.visualDescription}\n\nCamera: ${spec.cameraDirective}\nLighting: ${spec.lightingDirective}\nPurpose: ${spec.purpose}`,
-      metadata: {
-        purpose: spec.purpose,
-        durationSeconds: spec.durationSeconds,
-        animation_prompt: spec.motionPrompt,
-        from_concept_card: card.id,
-      } as import("@/lib/supabase/types").Json,
+      title: shot.title,
+      prompt: shot.prompt,
+      prompt_enhanced: shot.prompt_enhanced,
+      metadata: shot.metadata,
     };
     try {
       const updated = await adapter.updateNode(shot.id, realData);

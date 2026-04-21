@@ -256,7 +256,7 @@ function ConceptCardInspector({ node }: { node: NodeRow }) {
 
         {tab === "settings" && (
           <div className="flex flex-col gap-3">
-            <SettingRow label="Shot count" value={String(meta.shot_count ?? 5)} />
+            <SettingRow label="Shots" value={meta.shot_count ? `${meta.shot_count} (AI-decided)` : "AI picks"} />
             <SettingRow label="Aspect ratio" value={meta.aspect ?? "9:16"} />
             <SettingRow label="Duration" value={`${meta.duration_sec ?? 15}s`} />
             {meta.image_model && (
