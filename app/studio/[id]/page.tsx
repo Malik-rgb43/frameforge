@@ -85,85 +85,85 @@ export default function StudioPage({ params }: { params: { id: string } }) {
 
     (async () => {
       setLoading(true);
-      const adapter = await getDataAdapter();
-
-      // ── Fast path: use cached board_id to skip project→boards round trips ──
-      // On every successful load we store `ff.board.<projectId>` in localStorage.
-      // On refresh we fire nodes+edges immediately (1 round trip vs 3 sequential).
-      const BOARD_CACHE_KEY = `ff.board.${resolvedId}`;
-      const cachedBoardId = typeof window !== "undefined"
-        ? localStorage.getItem(BOARD_CACHE_KEY)
-        : null;
-
-      // Also restore project from sessionStorage so TopBar renders instantly
-      const cachedProjRaw = typeof window !== "undefined"
-        ? sessionStorage.getItem("ff.active.project")
-        : null;
-      if (cachedProjRaw) {
-        try {
-          const cachedProj = JSON.parse(cachedProjRaw) as Project;
-          if (cachedProj.id === resolvedId) setProject(cachedProj);
-        } catch { /* ignore */ }
-      }
-
-      // Fire nodes+edges immediately if we know the board_id
       let fastLoaded = false;
-      if (cachedBoardId) {
-        try {
-          const [nds, eds] = await Promise.all([
-            adapter.listNodes(cachedBoardId),
-            adapter.listEdges(cachedBoardId),
-          ]);
-          if (!active) return;
-          setBoard(cachedBoardId, nds, eds);
-          setLoading(false);
-          fastLoaded = true;
-          if (nds.length > 0 && typeof window !== "undefined") {
-            const hasSaved = !!localStorage.getItem(`ff.vp.${cachedBoardId}`);
-            if (!hasSaved) setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
-          }
-        } catch {
-          // Fast path failed — fall through to full load below
+      try {
+        const adapter = await getDataAdapter();
+
+        // ── Fast path: use cached board_id to skip project→boards round trips ──
+        // On every successful load we store `ff.board.<projectId>` in localStorage.
+        // On refresh we fire nodes+edges immediately (1 round trip vs 3 sequential).
+        const BOARD_CACHE_KEY = `ff.board.${resolvedId}`;
+        const cachedBoardId = typeof window !== "undefined"
+          ? localStorage.getItem(BOARD_CACHE_KEY)
+          : null;
+
+        // Also restore project from sessionStorage so TopBar renders instantly
+        const cachedProjRaw = typeof window !== "undefined"
+          ? sessionStorage.getItem("ff.active.project")
+          : null;
+        if (cachedProjRaw) {
+          try {
+            const cachedProj = JSON.parse(cachedProjRaw) as Project;
+            if (cachedProj.id === resolvedId) setProject(cachedProj);
+          } catch { /* ignore */ }
         }
-      }
 
-      // ── Always fetch project + boards in background to keep data fresh ──
-      const proj = await adapter.getProject(resolvedId);
-      if (!active || !proj) {
-        if (active && !fastLoaded) setLoading(false);
-        return;
-      }
-      setProject(proj);
-      if (typeof window !== "undefined") {
-        try { sessionStorage.setItem("ff.active.project", JSON.stringify(proj)); } catch { /* quota */ }
-      }
+        // Fire nodes+edges immediately if we know the board_id
+        if (cachedBoardId) {
+          try {
+            const [nds, eds] = await Promise.all([
+              adapter.listNodes(cachedBoardId),
+              adapter.listEdges(cachedBoardId),
+            ]);
+            if (!active) return;
+            setBoard(cachedBoardId, nds, eds);
+            setLoading(false);
+            fastLoaded = true;
+            if (nds.length > 0 && typeof window !== "undefined") {
+              const hasSaved = !!localStorage.getItem(`ff.vp.${cachedBoardId}`);
+              if (!hasSaved) setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
+            }
+          } catch {
+            // Fast path failed — fall through to full load below
+          }
+        }
 
-      const boards = await adapter.listBoards(proj.id);
-      const board = boards[0];
-      if (!board) {
-        if (!fastLoaded) setLoading(false);
-        return;
-      }
+        // ── Always fetch project + boards in background to keep data fresh ──
+        const proj = await adapter.getProject(resolvedId);
+        if (!active || !proj) return;
+        setProject(proj);
+        if (typeof window !== "undefined") {
+          try { sessionStorage.setItem("ff.active.project", JSON.stringify(proj)); } catch { /* quota */ }
+        }
 
-      // Cache board_id for next refresh
-      if (typeof window !== "undefined") {
-        try { localStorage.setItem(BOARD_CACHE_KEY, board.id); } catch { /* quota */ }
-      }
+        const boards = await adapter.listBoards(proj.id);
+        const board = boards[0];
+        if (!board) return;
 
-      // If fast path already loaded this exact board, skip the full reload
-      if (fastLoaded && board.id === cachedBoardId) return;
+        // Cache board_id for next refresh
+        if (typeof window !== "undefined") {
+          try { localStorage.setItem(BOARD_CACHE_KEY, board.id); } catch { /* quota */ }
+        }
 
-      // Slow path: board changed or no cache — load nodes+edges now
-      const [nds, eds] = await Promise.all([
-        adapter.listNodes(board.id),
-        adapter.listEdges(board.id),
-      ]);
-      if (!active) return;
-      setBoard(board.id, nds, eds);
-      setLoading(false);
-      if (nds.length > 0 && typeof window !== "undefined") {
-        const hasSaved = !!localStorage.getItem(`ff.vp.${board.id}`);
-        if (!hasSaved) setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
+        // If fast path already loaded this exact board, skip the full reload
+        if (fastLoaded && board.id === cachedBoardId) return;
+
+        // Slow path: board changed or no cache — load nodes+edges now
+        const [nds, eds] = await Promise.all([
+          adapter.listNodes(board.id),
+          adapter.listEdges(board.id),
+        ]);
+        if (!active) return;
+        setBoard(board.id, nds, eds);
+        if (nds.length > 0 && typeof window !== "undefined") {
+          const hasSaved = !!localStorage.getItem(`ff.vp.${board.id}`);
+          if (!hasSaved) setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
+        }
+      } catch (err) {
+        console.error("[studio] board load failed:", err);
+      } finally {
+        // Always clear the spinner — never leave the user stuck
+        if (active) setLoading(false);
       }
     })();
     return () => { active = false; };
