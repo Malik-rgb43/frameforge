@@ -298,36 +298,46 @@ Target range: ${rangeHint} shots for ${durationSec}s. But the concept decides.
 ═══ PROJECT BRIEF (binding) ═══
 A PROJECT BRIEF appears in the user message. Product, audience, hard avoids — all non-negotiable.
 
-═══ SHOT ARCHITECTURE ═══
-Shot 1 — HOOK (must work in 0.5s): extreme close-up of an unexpected detail, a visual mismatch, or something the viewer has never seen before. NO setup, NO wide establishing shots.
-Middle shots — STORY ENGINE: narrative beats that build tension then release it. Product appears in MAX 2-3 shots. Story carries everything else.
-Last shot — DESIRE: viewer thinks "I need this." Contrast, proof, or the emotional payoff of the opening hook.
+═══ SHOT ARCHITECTURE — HOLLYWOOD 4-BEAT ARC ═══
+Beat 1 — RECOGNITION (shot 1): The viewer sees themselves, not the product. Extreme close-up of a specific human moment — unguarded, raw, unposed. No product. No context. The brain says "that's me." Must work in 0.5s.
+Beat 2 — TENSION (1-2 shots): Something is about to change. Build it visually — not with graphics or text, but with a human action, an environment detail, a physical sensation captured in camera. This is where the product appears if at all, in the person's hand, in use, never center-stage.
+Beat 3 — TRANSFORMATION (1 shot): The single clearest "before/after" visual the concept allows. A micro-expression shift, a physical change, a before/after of skin, light, motion. The product is a tool of transformation — show the result on the person, not the product.
+Beat 4 — ASPIRATION (last shot): Viewer thinks "I want to BE this." Show the identity, not the benefit. The person after — confident, still, complete. Wide enough to see posture, environment, the full emotional weight of who they've become.
+
+Cross-shot rules (non-negotiable for visual cohesion):
+- AESTHETIC DIRECTION (first decision): pick ONE aesthetic that runs through ALL shots. Options: "warm ambient" (golden light, skin tones, soft morning glow) | "theatrical light" (hard directional, dramatic shadow, luxury product) | "editorial street" (natural light, grain, candid realism) | "cool cinematic" (blue-tinted, high contrast, clean surfaces). State it in every visualDescription.
+- ONE color temperature across all shots — never mixed: all warm OR all cool OR all neutral
+- If a human appears across shots, same actor, same clothing, same environment — consistency creates belief
+- Sound implied by visuals: water, steam, glass, fabric — write descriptions that the viewer can almost hear
+- Product appears in EXACTLY the same orientation and placement in every shot it appears
 
 ═══ visualDescription — THE MOST IMPORTANT FIELD ═══
-This field is sent directly to an AI image model. It MUST be written like camera operator's blocking notes, not a creative brief.
+This field is sent DIRECTLY to an AI image model (NanoBanana Pro / Higgsfield). It must be written in the exact format these models understand — camera operator blocking notes.
 
-REQUIRED FORMAT:
-"[Subject description: who/what, exact position, exact action]. [Background/environment: what's behind them, specific surfaces, textures, ambient objects]. [The one defining detail: the single object or expression that makes this frame unforgettable]."
+REQUIRED FORMAT (4 parts, in this order):
+1. LENS + SHOT TYPE: "Telephoto 85mm, low-angle 20cm off floor, static locked:" or "Handheld tracking shot, medium:" or "Extreme close-up, macro 100mm:"
+2. CHARACTER/SUBJECT: exact clothing (color, material, fit), exact position, exact action. E.g. "a woman in an ivory silk robe, standing at a white marble vanity, right hand pressing a glass perfume bottle against her left wrist"
+3. ENVIRONMENT: specific surface materials, lighting source, depth. E.g. "Venetian plaster walls, chrome fixtures, frosted glass window diffusing morning light from the left. Floor: large-format white limestone tiles. Steam faintly visible at top of frame."
+4. KEY DETAIL: the single element that makes this frame unforgettable. E.g. "The amber liquid inside the bottle catches the light, casting a warm gold patch on the marble."
 
-MANDATORY RULES for visualDescription:
-✓ Describe EXACTLY what fills the camera frame — position, scale, action, texture
-✓ All objects follow real-world gravity and physics
-✓ Every scene is something a real camera crew could set up in a real location
-✓ Specify surfaces, materials, and distances between objects
-✓ If a product is in frame: describe its exact position, orientation, and what it's touching
-✗ NEVER use emotional/narrative language ("anxiety", "chaos", "liberation") — those are editorial notes
-✗ NEVER describe flying objects, explosions, objects defying gravity, or impossible physics
-✗ NEVER include text, timers, clocks, digital overlays, or numbers within the scene — those are post-production
-✗ NEVER describe multiple disconnected scenes in one shot
-✗ NEVER use vague descriptors: "cluttered", "messy", "beautiful" — name the specific objects
+MANDATORY PHYSICS/REALITY RULES:
+✓ All objects follow real-world gravity — nothing floats, flies, or defies physics
+✓ Every scene must be shootable by a real camera crew in a real location
+✓ If product appears: describe its exact position, what surface it rests on, which hand holds it
+✓ One color temperature throughout: all warm amber OR all cool blue OR all soft neutral — never mixed
+✗ NEVER use emotional language: "anxiety", "chaos", "liberation", "freedom" — describe what the camera SEES
+✗ NEVER include text, numbers, timers, clocks, or digital displays in the scene
+✗ NEVER describe flying, exploding, or impossible physics
+✗ NEVER use vague words: "beautiful", "cluttered", "messy" — name the SPECIFIC objects
+✗ Last shot (CTA/packshot): right third of frame intentionally empty, clean neutral background — space for logo
 
-EXAMPLES OF BAD visualDescription (reject these):
-❌ "A chaotic scene of anxiety and grooming pressure, products flying everywhere symbolizing the chaos"
-❌ "A timer counting down represents the time-theft concept amid swirling beauty products"
+EXAMPLES — BAD (reject immediately):
+❌ "Products flying everywhere symbolizing grooming chaos with timer counting down"
+❌ "Woman feeling liberated, beauty products swirling around her in a whirlwind"
 
-EXAMPLES OF GOOD visualDescription (write like these):
-✓ "Extreme close-up of a woman's hand gripping a pink razor, water beading on her forearm, foreground blurred ceramic tub edge. Background: out-of-focus chrome showerhead. The razor blade fills 60% of the frame."
-✓ "Medium shot, woman's right hand in a wet shower, slowly sliding a compact pink electric shaver upward along her shin, steam visible in the top-left. Her arm is in sharp focus, the white tile wall behind her softly blurred."
+EXAMPLES — GOOD (write exactly like this):
+✓ "Extreme close-up, macro 100mm: a woman's right wrist, bare skin, forearm horizontal across frame. A glass perfume bottle with gold cap held in her left hand tilts and touches the inside of the wrist. Amber liquid visible inside bottle, catching warm window light from the right. Background: heavily blurred white marble surface. The glass stopper catches light and creates a small golden flare."
+✓ "Telephoto 85mm, static locked: a young woman in a dark turtleneck, sitting at a white marble kitchen counter, both hands flat on the surface, head slightly bowed. Morning light from a window behind her left shoulder. White subway tile wall in soft focus. A compact electric shaver rests on the counter 30cm in front of her hands, centered."
 
 ═══ REMAINING FIELDS ═══
 - title: 3-5 words capturing the emotional beat (for the editor, not the image model)
@@ -685,22 +695,39 @@ export async function generateWorkflow(
         durationSeconds?: number;
         animation_prompt?: string;
       };
+      const shotRole = shotMeta.purpose ?? "story";
+      const isHook = i === 0;
+      const isClosing = i === createdShots.length - 1;
       const imagePrompt = [
-        `DIRECT-RESPONSE AD STILL — ORIGINAL CREATIVE CONCEPT`,
-        `Shot ${i + 1} of ${createdShots.length}: ${shot.title ?? ""}`,
+        `HOLLYWOOD-GRADE AD STILL — DIRECT RESPONSE — SHOT ${i + 1} OF ${createdShots.length}`,
         ``,
-        `SCENE: ${shot.prompt ?? ""}`,
-        shot.prompt_enhanced ? `CINEMATIC DETAIL: ${shot.prompt_enhanced.split("\n\n")[0]}` : "",
+        `FRAME: ${shot.title ?? ""}`,
+        `SCENE (camera blocking notes): ${shot.prompt ?? ""}`,
         shot.prompt_enhanced?.includes("Camera:") ? shot.prompt_enhanced.split("\n\n").slice(1).join("\n") : "",
         ``,
-        `SHOT ROLE: ${shotMeta.purpose ?? "story"} — ${i === 0 ? "This is the hook frame — must create immediate visceral impact in under 0.5s" : i === createdShots.length - 1 ? "This is the closing frame — must create desire and visual resolution" : "This is a story beat — must carry emotional weight and visual interest"}`,
+        isHook
+          ? `HOOK FRAME — First 0.5 seconds decide everything. The composition must stop the scroll before the brain can decide to keep scrolling. Use extreme close-up, unexpected angle, or a visual mismatch the eye cannot ignore.`
+          : isClosing
+          ? `CLOSING FRAME — Aspirational identity. The viewer sees who they become, not what the product does. Emotionally resolved, visually satisfying, no loose ends.`
+          : `STORY BEAT [${shotRole}] — Emotional weight through specificity. One clear focal point, no visual noise. Every object in frame is intentional.`,
         ``,
-        `PRODUCTION STANDARDS:`,
-        `- Commercial photography quality: sharp, intentional composition, not stock-photo generic`,
-        `- Cinematic color grading — not flat or oversaturated`,
-        `- Real textures, authentic imperfection — no airbrushed perfection`,
-        `- Single clear focal point — no visual clutter`,
-        refImages.length > 0 ? `- Reference images attached are STYLE/MOOD DIRECTION ONLY — do NOT recreate their content. Create an entirely original scene in that visual language.` : "",
+        `ABSOLUTE HARD CONSTRAINTS — violating any of these ruins the shot:`,
+        `✗ NO objects flying, floating, or defying gravity — all physics are real`,
+        `✗ NO text, numbers, timers, clocks, or digital readouts anywhere in the image`,
+        `✗ NO product packaging shown as a billboard or center-stage display — product lives in human hands or natural environment`,
+        `✗ NO stock-photo expressions — real micro-moments, unguarded, specific`,
+        `✗ NO visual metaphors shown literally (do not show "time" as a clock, "chaos" as swirling objects)`,
+        ``,
+        `SOUL CINEMA QUALITY STANDARD:`,
+        `- Cinematic-grade depth of field: subject razor sharp, background softly blurred (f/1.8–f/2.8 feel)`,
+        `- Deep rich textures: every surface has tactile quality — water on skin, steam on glass, grain on concrete`,
+        `- Spontaneous look: no airbrushed perfection, no stock-photo poses — real micro-moments caught mid-action`,
+        `- Lighting motivated by ONE real source: window light / candle / neon sign / morning sun — never flat`,
+        `- ONE color temperature throughout: warm amber OR cool blue OR soft neutral — never mixed`,
+        `- Film grain aesthetics: subtle grain is cinematic — avoid sterile digital cleanliness`,
+        `- Single focal point: the eye lands in under 0.3 seconds — nothing competes with the subject`,
+        `- Dynamic composition: subject off-center, use rule of thirds, intentional negative space`,
+        refImages.length > 0 ? `- Reference images = VISUAL LANGUAGE ONLY — color palette, mood, texture. Do NOT recreate their content. This is an entirely original scene.` : "",
       ].filter(Boolean).join("\n");
 
       const res = await internalFetch("/api/nanobanana", {
