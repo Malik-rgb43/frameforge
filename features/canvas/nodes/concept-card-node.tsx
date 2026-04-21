@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Handle, Position, type NodeProps } from "reactflow";
 import {
   Loader2,
@@ -58,6 +58,9 @@ export default function ConceptCardNode({
   const [durationSec, setDurationSec] = useState(meta.duration_sec ?? 15);
   const [aspect, setAspect] = useState(meta.aspect ?? "9:16");
   const [imageModel, setImageModel] = useState((meta as { image_model?: string }).image_model ?? "gemini-2.0-flash-exp-image-generation");
+  const generatingRef = useRef(false);
+  const abortCtrlRef = useRef<AbortController | null>(null);
+  const [genError, setGenError] = useState<string | null>(null);
   const [suggesting, setSuggesting] = useState(false);
   const [suggestError, setSuggestError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<ConceptSuggestion[]>(
@@ -94,6 +97,11 @@ export default function ConceptCardNode({
   };
 
   const runGenerate = async () => {
+    if (generatingRef.current) return;
+    generatingRef.current = true;
+    setGenError(null);
+    const ctrl = new AbortController();
+    abortCtrlRef.current = ctrl;
     saveMeta({
       idea,
       duration_sec: durationSec,
@@ -102,9 +110,15 @@ export default function ConceptCardNode({
       image_model: imageModel,
     });
     try {
-      await generateWorkflow(row.id);
+      await generateWorkflow(row.id, { signal: ctrl.signal });
+      window.dispatchEvent(new Event("ff:fit-view"));
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Generation failed";
+      if (msg !== "aborted" && !ctrl.signal.aborted) setGenError(msg);
       console.error("workflow failed", err);
+    } finally {
+      generatingRef.current = false;
+      abortCtrlRef.current = null;
     }
   };
 
@@ -177,13 +191,14 @@ export default function ConceptCardNode({
             {/* Cancel */}
             <div className="flex justify-center">
               <button
-                onClick={() =>
+                onClick={() => {
+                  abortCtrlRef.current?.abort();
                   updateNode(row.id, {
                     status: "ready",
                     metadata: { ...meta, concept_state: "idle" } as unknown as import("@/lib/supabase/types").Json,
                     updated_at: new Date().toISOString(),
-                  })
-                }
+                  });
+                }}
                 className="text-[10px] text-text-muted hover:text-text-secondary border border-border-subtle/50 rounded-md px-3 py-1 hover:border-border-subtle transition-colors"
               >
                 Cancel
@@ -255,6 +270,13 @@ export default function ConceptCardNode({
             {suggestError && (
               <div className="text-[9px] text-status-error font-mono px-2 py-1.5 rounded-lg bg-status-error/10 border border-status-error/20">
                 {suggestError}
+              </div>
+            )}
+
+            {/* Generate error */}
+            {genError && (
+              <div className="text-[9px] text-status-error font-mono px-2 py-1.5 rounded-lg bg-status-error/10 border border-status-error/20">
+                {genError}
               </div>
             )}
 

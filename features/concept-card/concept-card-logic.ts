@@ -356,6 +356,7 @@ SHOTS:
 ${shotSummary}
 
 Write the concept brief. Prose only.`,
+        responseMimeType: "text/plain",
         action: "concept-card.brief",
       }),
     });
@@ -415,6 +416,7 @@ SHOT LIST:
 ${shotList}
 
 Write the complete editorial brief. Be highly specific and actionable.`,
+        responseMimeType: "text/plain",
         action: "concept-card.editorial-brief",
       }),
     });
@@ -435,7 +437,8 @@ Write the complete editorial brief. Be highly specific and actionable.`,
 // ─────────────────────────────────────────────────────────
 
 export async function generateWorkflow(
-  conceptCardId: string
+  conceptCardId: string,
+  options?: { signal?: AbortSignal }
 ): Promise<NodeGroup | null> {
   const state = useCanvas.getState();
   const card = state.nodes.find((n) => n.id === conceptCardId);
@@ -592,6 +595,7 @@ export async function generateWorkflow(
 
   // 4. Generate images per shot (sequentially, with mock fallback)
   for (let i = 0; i < createdShots.length; i++) {
+    if (options?.signal?.aborted) break;
     const shot = createdShots[i];
     try {
       const res = await internalFetch("/api/nanobanana", {
