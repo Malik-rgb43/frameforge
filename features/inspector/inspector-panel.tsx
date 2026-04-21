@@ -311,10 +311,13 @@ function NoteInspector({ node }: { node: NodeRow }) {
 
 // Editorial Brief — parses markdown sections and renders as a structured doc
 function EditorialBriefInspector({ text }: { text: string }) {
-  const [expanded, setExpanded] = useState<Set<number>>(new Set([0]));
-
-  // Split text into sections by ### or ## headers
   const sections = parseBriefSections(text);
+  // Start all expanded so the user can read everything immediately
+  const [expanded, setExpanded] = useState<Set<number>>(
+    () => new Set(sections.map((_, i) => i))
+  );
+
+  const allExpanded = expanded.size === sections.length;
 
   const toggleSection = (i: number) => {
     setExpanded((prev) => {
@@ -324,19 +327,33 @@ function EditorialBriefInspector({ text }: { text: string }) {
     });
   };
 
+  const toggleAll = () => {
+    setExpanded(allExpanded ? new Set() : new Set(sections.map((_, i) => i)));
+  };
+
   return (
-    <div className="flex-1 overflow-y-auto flex flex-col min-h-0">
-      {/* Sticky header bar */}
-      <div className="px-4 pt-3 pb-2 border-b border-border-subtle flex items-center justify-between flex-shrink-0 bg-panel/80 backdrop-blur-sm">
+    // Outer wrapper: flex-col, overflow-hidden — lets inner div handle scroll
+    <div className="flex flex-col min-h-0 flex-1 overflow-hidden">
+      {/* Header bar — never scrolls away */}
+      <div className="px-4 pt-3 pb-2 border-b border-border-subtle flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-1.5">
           <Film className="w-3.5 h-3.5 text-accent-cool" />
           <span className="text-xs font-semibold text-text-primary tracking-wide">Editorial Brief</span>
           <span className="text-2xs text-text-muted font-mono">({sections.length} sections)</span>
         </div>
-        <CopyButton text={text} />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={toggleAll}
+            className="text-2xs text-text-muted hover:text-text-secondary px-2 py-1 rounded hover:bg-white/5 transition-colors font-mono"
+          >
+            {allExpanded ? "Collapse all" : "Expand all"}
+          </button>
+          <CopyButton text={text} />
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-1.5">
+      {/* Scroll area — this is the only scrollable element */}
+      <div className="overflow-y-auto flex-1 px-3 py-3 flex flex-col gap-1.5">
         {sections.length > 0 ? (
           sections.map((section, i) => (
             <BriefSection
@@ -349,7 +366,6 @@ function EditorialBriefInspector({ text }: { text: string }) {
             />
           ))
         ) : (
-          // Fallback: no parseable sections, render as plain text
           <div className="text-xs leading-relaxed text-text-secondary whitespace-pre-wrap p-3 rounded-lg bg-canvas border border-border-subtle" dir="auto">
             {text}
           </div>
