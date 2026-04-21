@@ -28,13 +28,11 @@ export function useAuth() {
   return useContext(AuthContext);
 }
 
-// Timeout wrapper so ensureWorkspace never hangs if Supabase is unreachable.
-function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T> {
+// Timeout wrapper — returns null instead of throwing so callers stay alive.
+function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
     promise,
-    new Promise<T>((_, reject) =>
-      setTimeout(() => reject(new Error(`ensureWorkspace timed out after ${ms}ms`)), ms)
-    ),
+    new Promise<null>((resolve) => setTimeout(() => resolve(null), ms)),
   ]);
 }
 
@@ -53,7 +51,7 @@ async function ensureWorkspace(userId: string): Promise<string | null> {
       .eq("user_id", userId)
       .limit(1)
       .maybeSingle(),
-    8000
+    15_000
   );
 
   if (memberResult?.data?.workspace_id) return memberResult.data.workspace_id as string;
@@ -65,10 +63,10 @@ async function ensureWorkspace(userId: string): Promise<string | null> {
       .insert({ name: "My Workspace", owner_user_id: userId })
       .select("id")
       .single(),
-    8000
+    15_000
   );
 
-  if (wsResult.error || !wsResult.data) return null;
+  if (!wsResult || wsResult.error || !wsResult.data) return null;
 
   await withTimeout(
     sb.from("workspace_members").insert({
@@ -76,7 +74,7 @@ async function ensureWorkspace(userId: string): Promise<string | null> {
       user_id: userId,
       role: "owner",
     }),
-    8000
+    15_000
   );
 
   return wsResult.data.id as string;
@@ -86,11 +84,9 @@ async function resolveSession(session: Session): Promise<Partial<AuthState>> {
   const cached = getCachedWorkspaceId();
   if (cached) {
     // Fast path — use cached workspace, validate silently in background
-    ensureWorkspace(session.user.id).then((id) => {
-      if (id && id !== cached) {
-        setCachedWorkspaceId(id);
-      }
-    });
+    ensureWorkspace(session.user.id)
+      .then((id) => { if (id && id !== cached) setCachedWorkspaceId(id); })
+      .catch(() => { /* network slow — keep cached value */ });
     return { user: session.user, workspaceId: cached, loading: false };
   }
   // First-ever load: resolve from DB
@@ -133,8 +129,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
         return;
       }
-      const patch = await resolveSession(session);
-      setState((s) => ({ ...s, ...patch }));
+      try {
+        const patch = await resolveSession(session);
+        setState((s) => ({ ...s, ...patch }));
+      } catch (err) {
+        console.warn("resolveSession failed in onAuthStateChange", err);
+        setState((s) => ({ ...s, loading: false }));
+      }
     });
 
     return () => subscription.unsubscribe();
