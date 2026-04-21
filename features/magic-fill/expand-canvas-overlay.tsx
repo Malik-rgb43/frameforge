@@ -167,11 +167,12 @@ export default function ExpandCanvasOverlay({ open, onClose }: Props) {
 
     // Create placeholder node in "generating" state immediately
     const store = useCanvas.getState();
+    const boardId = store.boardId ?? source.board_id;
     const newNodeId = crypto.randomUUID();
     const now = new Date().toISOString();
     const placeholder: NodeRow = {
       id: newNodeId,
-      board_id: store.boardId ?? source.board_id,
+      board_id: boardId,
       group_id: source.group_id ?? null,
       type: "shot",
       x: source.x + (source.w ?? 240) + 24,
@@ -194,6 +195,8 @@ export default function ExpandCanvasOverlay({ open, onClose }: Props) {
       updated_at: now,
     };
     store.upsertNode(placeholder);
+    // Select the placeholder so the canvas focuses it
+    store.setSelectedIds([newNodeId]);
 
     // Close immediately — user returns to canvas and sees loading node
     onClose();
@@ -260,8 +263,11 @@ export default function ExpandCanvasOverlay({ open, onClose }: Props) {
         try {
           const saved = await adapter.createNode(nodeInput);
           useCanvas.getState().upsertNode(saved);
+          useCanvas.getState().setSelectedIds([saved.id]);
         } catch {
-          useCanvas.getState().upsertNode({ ...placeholder, image_url: dataUrl, status: "ready", quality_score: 85, metadata: { cost_usd: data.usage.costUsd } as import("@/lib/supabase/types").Json, updated_at: new Date().toISOString() });
+          const fallback = { ...placeholder, image_url: dataUrl, status: "ready" as const, quality_score: 85, metadata: { cost_usd: data.usage.costUsd } as import("@/lib/supabase/types").Json, updated_at: new Date().toISOString() };
+          useCanvas.getState().upsertNode(fallback);
+          useCanvas.getState().setSelectedIds([fallback.id]);
         }
       } catch (err) {
         console.error("Magic expand failed", err);

@@ -2,9 +2,8 @@
 import { internalFetch } from "@/lib/api";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { X, Sparkles, Wand2, Loader2, ImageOff, Maximize2 } from "lucide-react";
+import { X, Wand2, ImageOff, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useI18n } from "@/lib/i18n/store";
 import { useCanvas } from "@/features/canvas/store";
 import { getDataAdapter } from "@/lib/data-adapter";
 import { formatUsd, getImageModel } from "@/lib/ai/pricing";
@@ -32,7 +31,6 @@ const HANDLES = [
 type Handle = (typeof HANDLES)[number];
 
 export default function MagicFillModal({ open, onClose }: Props) {
-  const t = useI18n((s) => s.t);
   const selectedId = useCanvas((s) => s.selectedNodeIds[0]);
   const nodes = useCanvas((s) => s.nodes);
 
@@ -43,7 +41,6 @@ export default function MagicFillModal({ open, onClose }: Props) {
 
   const [prompt, setPrompt] = useState("");
   const [preset, setPreset] = useState<AspectPreset>("1:1");
-  const [applying, setApplying] = useState(false);
   const [cost, setCost] = useState<number | null>(null);
 
   // imgRect: where the original image is displayed (fixed)
@@ -160,18 +157,18 @@ export default function MagicFillModal({ open, onClose }: Props) {
     };
   }, [frame]);
 
-  const canApply = !!source?.image_url && !applying;
+  const canApply = !!source?.image_url;
 
   const model = getImageModel("nanobanana-pro");
 
-  const apply = async () => {
+  const apply = () => {
     if (!source || !canApply) return;
-    setApplying(true);
-    try {
-      const extendedPrompt =
-        prompt.trim() ||
-        "Extend this image seamlessly to fill the new canvas. Continue the existing scene naturally in all exposed areas.";
-      const fullPrompt = `MAGIC EXPAND:
+
+    const capturedSource = source;
+    const extendedPrompt =
+      prompt.trim() ||
+      "Extend this image seamlessly to fill the new canvas. Continue the existing scene naturally in all exposed areas.";
+    const fullPrompt = `MAGIC EXPAND:
 Original image attached as reference — preserve it exactly where it appears.
 New canvas aspect: ${output.aspect} (${output.w}×${output.h}).
 Extension directive: ${extendedPrompt}
@@ -185,104 +182,141 @@ Avoid:
 - Plastic or uncanny artifacts
 - Blatantly AI-looking seams`;
 
-      // Convert source image to base64 for reference
-      let refImages: Array<{ base64: string; mimeType: string }> = [];
-      if (source.image_url) {
-        try {
-          const imgUrl = source.image_url;
+    // Create placeholder node in "generating" state immediately
+    const store = useCanvas.getState();
+    const boardId = store.boardId ?? capturedSource.board_id;
+    const newNodeId = crypto.randomUUID();
+    const now = new Date().toISOString();
+    const placeholder: import("@/lib/supabase/types").NodeRow = {
+      id: newNodeId,
+      board_id: boardId,
+      group_id: capturedSource.group_id ?? null,
+      type: "shot",
+      x: capturedSource.x + (capturedSource.w ?? 240) + 24,
+      y: capturedSource.y,
+      w: capturedSource.w ?? 240,
+      h: capturedSource.h ?? 300,
+      order_index: store.nodes.length,
+      image_url: null,
+      thumbnail_url: null,
+      prompt: extendedPrompt,
+      prompt_enhanced: fullPrompt,
+      title: (capturedSource.title ?? "Shot") + " (expanded)",
+      status: "generating",
+      quality_score: null,
+      metadata: {} as import("@/lib/supabase/types").Json,
+      animation_prompt: null,
+      animation_model_hint: null,
+      used_ref_ids: null,
+      created_at: now,
+      updated_at: now,
+    };
+    store.upsertNode(placeholder);
+    // Select the placeholder so the canvas stays on it
+    store.setSelectedIds([newNodeId]);
+
+    // Close immediately — user returns to canvas and sees loading node
+    onClose();
+
+    // Run API in background (fire-and-forget)
+    void (async () => {
+      try {
+        let refImages: Array<{ base64: string; mimeType: string }> = [];
+        if (capturedSource.image_url) {
+          const imgUrl = capturedSource.image_url;
           if (imgUrl.startsWith("data:")) {
             const match = imgUrl.match(/^data:([^;]+);base64,(.+)$/);
             if (match) refImages = [{ mimeType: match[1], base64: match[2] }];
           } else {
-            const imgRes = await fetch(imgUrl);
-            const blob = await imgRes.blob();
-            const b64 = await new Promise<string>((res) => {
-              const reader = new FileReader();
-              reader.onload = () => {
-                const dataUrl = reader.result as string;
-                const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
-                res(m ? m[2] : "");
-              };
-              reader.readAsDataURL(blob);
-            });
-            if (b64) refImages = [{ mimeType: blob.type || "image/jpeg", base64: b64 }];
+            try {
+              const imgRes = await fetch(imgUrl);
+              const blob = await imgRes.blob();
+              const b64 = await new Promise<string>((res) => {
+                const reader = new FileReader();
+                reader.onload = () => {
+                  const dataUrl = reader.result as string;
+                  const m = dataUrl.match(/^data:([^;]+);base64,(.+)$/);
+                  res(m ? m[2] : "");
+                };
+                reader.readAsDataURL(blob);
+              });
+              if (b64) refImages = [{ mimeType: blob.type || "image/jpeg", base64: b64 }];
+            } catch {
+              // proceed without ref
+            }
           }
-        } catch {
-          // proceed without ref
         }
-      }
 
-      const res = await internalFetch("/api/nanobanana", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          prompt: fullPrompt,
-          modelId: "nanobanana-pro",
-          aspectRatio: output.aspect,
-          refImages,
-          action: "image.expand",
-          nodeId: source.id,
-        }),
-      });
+        const res = await internalFetch("/api/nanobanana", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            prompt: fullPrompt,
+            modelId: "nanobanana-pro",
+            aspectRatio: output.aspect,
+            refImages,
+            action: "image.expand",
+            nodeId: capturedSource.id,
+          }),
+        });
 
-      if (!res.ok) {
-        const { error } = (await res.json().catch(() => ({
-          error: "API call failed",
-        }))) as { error?: string };
-        throw new Error(error ?? "API call failed");
-      }
-      const data = (await res.json()) as {
-        imageBase64: string;
-        mimeType: string;
-        usage: { costUsd: number };
-      };
+        if (!res.ok) {
+          const { error } = (await res.json().catch(() => ({
+            error: "API call failed",
+          }))) as { error?: string };
+          throw new Error(error ?? "API call failed");
+        }
+        const data = (await res.json()) as {
+          imageBase64: string;
+          mimeType: string;
+          usage: { costUsd: number };
+        };
 
-      setCost(data.usage.costUsd);
-      const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
+        setCost(data.usage.costUsd);
+        const dataUrl = `data:${data.mimeType};base64,${data.imageBase64}`;
 
-      // Create a NEW node next to the source instead of overwriting it
-      const store = useCanvas.getState();
-      const boardId = store.boardId;
-      if (boardId) {
         const adapter = await getDataAdapter();
-        const newNodeInput = {
+        const nodeInput = {
+          id: newNodeId,
           board_id: boardId,
-          group_id: source.group_id,
-          type: "shot" as const,
-          x: source.x + (source.w ?? 240) + 24,
-          y: source.y,
-          w: source.w ?? 240,
-          h: source.h ?? 300,
-          order_index: store.nodes.length,
+          group_id: placeholder.group_id,
+          type: placeholder.type,
+          x: placeholder.x,
+          y: placeholder.y,
+          w: placeholder.w,
+          h: placeholder.h,
+          order_index: placeholder.order_index,
           image_url: dataUrl,
           thumbnail_url: null,
-          prompt: (source.prompt ?? "") + "\n\n+ Magic Expand: " + extendedPrompt,
-          prompt_enhanced: fullPrompt,
-          title: (source.title ?? "Shot") + " (expanded)",
+          prompt: placeholder.prompt,
+          prompt_enhanced: placeholder.prompt_enhanced,
+          title: placeholder.title,
           status: "ready" as const,
           quality_score: 85,
           metadata: { cost_usd: data.usage.costUsd } as import("@/lib/supabase/types").Json,
         };
         try {
-          const saved = await adapter.createNode(newNodeInput);
-          store.upsertNode(saved);
+          const saved = await adapter.createNode(nodeInput);
+          useCanvas.getState().upsertNode(saved);
+          useCanvas.getState().setSelectedIds([saved.id]);
         } catch {
-          store.upsertNode({
-            ...newNodeInput,
-            id: crypto.randomUUID(),
-            created_at: new Date().toISOString(),
+          const fallback = {
+            ...placeholder,
+            image_url: dataUrl,
+            status: "ready" as const,
+            quality_score: 85,
+            metadata: { cost_usd: data.usage.costUsd } as import("@/lib/supabase/types").Json,
             updated_at: new Date().toISOString(),
-          } as import("@/lib/supabase/types").NodeRow);
+          };
+          useCanvas.getState().upsertNode(fallback);
+          useCanvas.getState().setSelectedIds([fallback.id]);
         }
+      } catch (err) {
+        console.error("Magic expand failed", err);
+        // Revert placeholder to show original source image
+        useCanvas.getState().upsertNode({ ...placeholder, status: "ready" as const, image_url: capturedSource.image_url });
       }
-      setTimeout(() => onClose(), 600);
-    } catch (err) {
-      console.error("Magic expand failed", err);
-      const msg = err instanceof Error ? err.message : "Failed";
-      alert(msg);
-    } finally {
-      setApplying(false);
-    }
+    })();
   };
 
   return (
@@ -502,12 +536,8 @@ Avoid:
                         : "bg-white/5 text-text-muted cursor-not-allowed"
                     )}
                   >
-                    {applying ? (
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                    ) : (
-                      <Wand2 className="w-4 h-4" />
-                    )}
-                    {applying ? "Expanding..." : "Apply Expand"}
+                    <Wand2 className="w-4 h-4" />
+                    Apply Expand
                   </button>
                 </footer>
               </div>

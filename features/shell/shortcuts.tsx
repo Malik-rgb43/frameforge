@@ -1,13 +1,13 @@
 "use client";
 import { useEffect } from "react";
 import { useCanvas } from "@/features/canvas/store";
-import { createContinuation } from "@/features/continuity/next-shot";
 import {
   downloadNodeImage,
   pickFiles,
   uploadImagesAsSources,
 } from "@/features/upload/upload-utils";
 import { getDataAdapter } from "@/lib/data-adapter";
+import { createConceptCard } from "@/features/concept-card/concept-card-logic";
 import type { NodeRow, NodeInput } from "@/lib/supabase/types";
 
 interface Props {
@@ -54,12 +54,6 @@ export default function ShortcutsHandler({
         await duplicateNode(selected);
         return;
       }
-      // ⌘+→ or ⌘+ArrowRight → next shot (continuity)
-      if (meta && e.key === "ArrowRight" && selected) {
-        e.preventDefault();
-        createContinuation(selected.id).catch(console.error);
-        return;
-      }
       // ⌘+S → download selected image
       if (meta && e.key.toLowerCase() === "s" && selected?.image_url) {
         e.preventDefault();
@@ -84,7 +78,7 @@ export default function ShortcutsHandler({
         case "c":
         case "C":
           e.preventDefault();
-          onConcepts?.();
+          createConceptCard().catch(console.error);
           break;
         case ",":
           if (meta) {

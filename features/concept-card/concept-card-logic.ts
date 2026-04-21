@@ -177,10 +177,15 @@ export async function getConnectedRefImages(cardId: string): Promise<Array<{base
   return results;
 }
 
+export interface ConceptSuggestion {
+  title: string;
+  description: string;
+}
+
 export async function suggestConceptIdeas(
   productContext: string,
   refImages?: Array<{base64: string; mimeType: string}>
-): Promise<string[]> {
+): Promise<ConceptSuggestion[]> {
   const briefCtx = await getProjectBriefContext();
   const refCount = refImages?.length ?? 0;
   try {
@@ -188,26 +193,32 @@ export async function suggestConceptIdeas(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemPrompt: `You are a senior direct-response creative director specializing in short-form video ads (TikTok, Instagram Reels, Meta). You turn product/service briefs into 4 distinct scroll-stopping concepts.
+        systemPrompt: `You are a senior creative director at a top direct-response agency. Your job is to generate AD CONCEPTS — not shot descriptions, not taglines, not product features.
 
-Each concept must:
-- Lead with the HOOK (what stops the scroll in <1 second) — not the brand
-- Target a specific avatar-pain-moment combination
-- Work for both products AND services
-- Feel native to the feed, not like a broadcast commercial
-- Have a clear visual spine (one image that defines the whole ad)
+A CONCEPT is the big creative idea that holds the whole ad together. It answers: WHAT IS THIS AD REALLY ABOUT? What human truth, emotion, or cultural moment does it tap into? What's the creative territory?
 
-Five hook mechanisms to choose from: (1) pattern interrupt — physics-defying or reversed moment, (2) curiosity gap — reaction before the cause, (3) extreme close-up — intimate texture/detail, (4) direct problem naming — self-selects the viewer in frame 1, (5) before/after reveal — outcome first, explanation follows.
+For EACH concept write:
+- title: 3-5 word campaign-level title (the idea name, not a product description)
+- description: 4-5 sentences covering ALL of these:
+  (1) THE BIG IDEA — the creative territory in one bold sentence. What is this ad REALLY about? Not the product — the human truth underneath it.
+  (2) THE HOOK STRATEGY — what stops the scroll and WHY it works psychologically. Not what you see — why it works.
+  (3) THE NARRATIVE ARC — how does the story move? What does the viewer feel at frame 1 vs. the last frame? What's the emotional journey?
+  (4) THE TONE & WORLD — what does this ad feel like? Raw UGC? Cinematic editorial? Fairy-tale surreal? Name the visual language.
+  (5) THE INSIGHT — the audience truth that makes this land. Why will THIS person stop scrolling for THIS concept specifically?
 
-REJECT: smiling-at-camera, marble-flat-lay, generic product-on-surface, hand-reach close-up, talking-head-with-logo.
+IMPORTANT RULES:
+- Think like a concept, not a shot. "A mom at 3am" is a SHOT. "The loneliness of loving someone so much you'd do anything for them" is a CONCEPT.
+- Each concept must tap a DIFFERENT emotional territory (e.g. relief, pride, nostalgia, fear, aspiration)
+- The product does NOT need to appear in every concept. Great ads use cultural references — fairy tales, movie moments, shared human experiences — as the creative vehicle
+- REJECT: product feature lists, shot descriptions, taglines without strategy behind them
 
-Return JSON: {"ideas":["...","...","...","..."]}. Each idea ≤ 1 sentence. No prose, no fences.`,
+Return JSON only: {"ideas":[{"title":"...","description":"..."},{"title":"...","description":"..."},{"title":"...","description":"..."},{"title":"...","description":"..."}]}`,
         userPrompt: `${briefCtx}
 
 ${productContext ? `ADDITIONAL CONTEXT: ${productContext}` : ""}
-${refCount > 0 ? `REFERENCE IMAGES: ${refCount} attached — read their mood/palette/style as creative input.` : ""}
+${refCount > 0 ? `REFERENCE IMAGES: ${refCount} attached — read their mood, palette, and style as creative direction.` : ""}
 
-Generate 4 distinct scroll-stopping concepts. Each must have a different hook mechanism and different target avatar. JSON only.`,
+Generate exactly 4 concepts. Each must have a different hook mechanism and target a different avatar. Be specific — name exact visuals, moments, and emotional beats. JSON only.`,
         responseMimeType: "application/json",
         action: "concept-card.suggest",
         images: refImages?.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.base64 } })),
@@ -215,15 +226,30 @@ Generate 4 distinct scroll-stopping concepts. Each must have a different hook me
     });
     if (!res.ok) throw new Error("suggest failed");
     const { data } = (await res.json()) as {
-      data: { ideas?: string[] };
+      data: { ideas?: ConceptSuggestion[] };
     };
-    return Array.isArray(data?.ideas) ? data.ideas.slice(0, 4) : [];
+    if (Array.isArray(data?.ideas)) {
+      return data.ideas.slice(0, 4).filter((i) => i.title && i.description);
+    }
+    return [];
   } catch {
     return [
-      "A 4am ritual: a single warm light and one hand pouring — no words.",
-      "An unexpected mid-action product shot — the exact second of impact.",
-      "Voyeur through-glass frame with condensation beading on the lens.",
-      "Pattern interrupt: extreme macro on a material surface nobody's seen.",
+      {
+        title: "4AM Ritual",
+        description: "Hook: extreme close-up of a single warm light switching on in a pitch-black room at 4am — no face, no product, just the light and the silence. The visual spine is one hand reaching toward the glow. The viewer feels the exhaustion and relief simultaneously. This converts because it names the exact moment the target audience lives — the 3am wake-up — before the product ever appears.",
+      },
+      {
+        title: "Rapunzel Reimagined",
+        description: "Hook: open on a recognizable fairy-tale tower scene — long hair cascading down — then cut to the modern equivalent. The cultural reference stops the scroll because the brain needs to resolve the mismatch. The visual spine is the contrast between the familiar story and the unexpected product reveal. This converts because story recognition creates instant emotional investment before a single product claim is made.",
+      },
+      {
+        title: "The Impact Frame",
+        description: "Hook: the exact millisecond of impact — a texture explosion, a surface breaking, a material transforming — caught in extreme slow motion. The visual spine is a single hyper-specific frame no one has seen before. The viewer feels visceral satisfaction from the sensory detail. This converts because the unexpectedness of the opening earns the next 10 seconds of attention.",
+      },
+      {
+        title: "Before The Mirror",
+        description: "Hook: a real person in an unguarded moment — not performing, not posed — just the private second before confidence kicks in. The visual spine is the face in the mirror vs. the face turned away. The emotional arc goes from recognition to aspiration in under 3 seconds. This converts because the viewer sees themselves, not an influencer.",
+      },
     ];
   }
 }
@@ -246,7 +272,7 @@ export async function generateShotList(
 
 SHOT STRUCTURE LAW:
 - Shot 1 = HOOK. Must deliver payoff in <0.5 seconds. No build-up. Pattern interrupt, extreme close-up, or direct problem naming. If it doesn't stop a scroll, it fails.
-- Middle shots = PROOF/TRANSFORMATION. Visual evidence — product in use, before/after, transformation moment. NO narration shots, NO beauty filler.
+- Middle shots = STORY/PROOF. Can be narrative beats, cultural references, emotional moments, or product proof — product does NOT need to appear in every shot. Great ads reference familiar stories (a fairy tale sequence, an iconic movie scene, a relatable human moment) as creative frameworks. Visual storytelling > product placement.
 - Last shot = REVEAL/CTA. Clear outcome or click trigger. Not a text card unless unavoidable.
 
 For EACH shot output these exact fields:
@@ -261,6 +287,7 @@ For EACH shot output these exact fields:
 Platform pacing: TikTok/Reels = fast cuts 1-2s each. Meta feed = allow 2-3s for proof shots.
 Authenticity markers (use these): handheld micro-movements, slight film grain, imperfect natural light, real textures.
 REJECT: generic AI faces, excessive overlays, visual noise, motion-blur overuse.
+CREATIVE DIRECTION: The best ads don't show the product in every frame. A concept can open with a Rapunzel-style scene, a cinematic nature reference, or a human emotional moment — then cut to the product. Think: story first, product second.
 
 Return JSON only: {"shots":[{...}]}`,
         userPrompt: `${briefCtx}
@@ -343,6 +370,68 @@ Write the concept brief. Prose only.`,
 }
 
 // ─────────────────────────────────────────────────────────
+// Generate a detailed editorial brief for a video editor.
+// ─────────────────────────────────────────────────────────
+
+async function generateEditorialBrief(
+  idea: string,
+  shots: ShotSpec[],
+  aspect: string,
+  durationSec: number
+): Promise<string> {
+  const briefCtx = await getProjectBriefContext();
+  try {
+    const shotList = shots
+      .map((s, i) =>
+        `Shot ${i + 1} — ${s.title} [${s.purpose}] ${s.durationSeconds}s\n  Visual: ${s.visualDescription}\n  Camera: ${s.cameraDirective}\n  Lighting: ${s.lightingDirective}\n  Motion: ${s.motionPrompt ?? "—"}`
+      )
+      .join("\n\n");
+
+    const res = await internalFetch("/api/gemini", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        systemPrompt: `You are a senior video editor and post-production supervisor writing a detailed editing guide for a direct-response ad. This document will be handed to the editor — make it precise, actionable, and frame-accurate.
+
+Write a detailed editorial brief covering ALL of the following:
+
+1. **EDIT RHYTHM** — Overall pacing (BPM feel, cut frequency), where to slow down, where to speed up. Name the exact shot transitions.
+2. **SHOT ORDER** — Confirm or suggest reordering. Explain why each shot follows the previous one emotionally and visually. Number each shot.
+3. **CUT POINTS** — For each shot, specify exactly where to cut in and cut out (e.g. "cut in on the third beat, cut out before the hand fully extends"). Be frame-specific where possible.
+4. **TRANSITIONS** — Type of cut for each transition: hard cut / J-cut / L-cut / smash cut / dissolve / whip pan. Name each one.
+5. **COLOR GRADE NOTES** — Overall look (contrast, saturation, color temperature), hero frame reference, any per-shot grade adjustments.
+6. **SOUND DESIGN** — Music bed feel (tempo, genre, instruments), SFX for each shot moment, any audio cut/swell techniques.
+7. **TYPOGRAPHY/TEXT** — If any supers/captions appear: font weight, size, timing, animation style, placement.
+8. **PLATFORM VARIANTS** — Notes for cutting a TikTok version vs Meta feed version (ratio, hook timing differences).
+9. **COMMON MISTAKES TO AVOID** — 3-5 specific anti-patterns that would kill this particular ad's effectiveness.
+
+Write in clear production language. Be specific and opinionated — vague advice is useless on a timeline. Use numbered lists and headers.`,
+        userPrompt: `${briefCtx}
+
+CONCEPT: ${idea}
+ASPECT RATIO: ${aspect}
+TOTAL DURATION: ${durationSec}s
+
+SHOT LIST:
+${shotList}
+
+Write the complete editorial brief. Be highly specific and actionable.`,
+        action: "concept-card.editorial-brief",
+      }),
+    });
+    if (!res.ok) throw new Error("editorial brief failed");
+    const body = (await res.json()) as { data?: unknown };
+    if (typeof body.data === "string") return body.data;
+    return "";
+  } catch {
+    const shotLines = shots.map((s, i) =>
+      `Shot ${i + 1} — ${s.title} (${s.durationSeconds}s, ${s.purpose}): ${s.visualDescription}`
+    ).join("\n");
+    return `## EDITORIAL BRIEF\n\n**Concept:** ${idea}\n**Duration:** ${durationSec}s | **Ratio:** ${aspect}\n\n**Shot Order:**\n${shotLines}\n\n**Pacing:** Fast cuts on hook (${shots[0]?.durationSeconds ?? 1}s), build tension through middle, hold on reveal.\n\n**Transitions:** Smash cut on hook. Hard cuts between middle shots. Slow-dissolve to CTA.\n\n**Color Grade:** High contrast, desaturated midtones, warm highlights. Hero frame = shot 1.\n\n**Sound:** Punchy kick at hook cut. Build through middle. Silence + SFX reveal on CTA.`;
+  }
+}
+
+// ─────────────────────────────────────────────────────────
 // Generate a full workflow: create group + shots + edges + images.
 // ─────────────────────────────────────────────────────────
 
@@ -376,8 +465,12 @@ export async function generateWorkflow(
     metadata: { ...meta, concept_state: "generating" },
   });
 
+  try {
   const adapter = await getDataAdapter();
   const now = new Date().toISOString();
+
+  // Read model from meta
+  const imageModel = (meta as { image_model?: string }).image_model ?? "gemini-2.0-flash-exp-image-generation";
 
   // 1. Create group
   const groupInput = {
@@ -495,7 +588,7 @@ export async function generateWorkflow(
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           prompt: shot.prompt_enhanced ?? shot.prompt,
-          modelId: "nanobanana-pro",
+          modelId: imageModel,
           aspectRatio: aspect,
           action: "concept-card.workflow-shot",
           nodeId: shot.id,
@@ -543,6 +636,48 @@ export async function generateWorkflow(
     }
   }
 
+  // 4.5 Generate editorial brief note card
+  const editorialBrief = await generateEditorialBrief(idea, shots, aspect, durationSec);
+
+  // Create a note node to the right of the shots row
+  const lastShot = createdShots[createdShots.length - 1];
+  const NOTE_W = 320;
+  const NOTE_H = 480;
+  const noteInput: NodeInput = {
+    board_id: state.boardId,
+    group_id: group.id,
+    type: "note",
+    x: lastShot ? lastShot.x + lastShot.w + 40 : startX + shots.length * (SHOT_W + GAP) + 40,
+    y: startY,
+    w: NOTE_W,
+    h: NOTE_H,
+    order_index: state.nodes.length + shots.length,
+    image_url: null,
+    thumbnail_url: null,
+    prompt: null,
+    prompt_enhanced: null,
+    title: "Editorial Brief",
+    status: "ready",
+    quality_score: null,
+    metadata: {
+      text: editorialBrief,
+      from_concept_card: conceptCardId,
+      note_type: "editorial_brief",
+    },
+  };
+  let briefNoteNode: NodeRow;
+  try {
+    briefNoteNode = await adapter.createNode(noteInput);
+  } catch {
+    briefNoteNode = {
+      ...noteInput,
+      id: uid(),
+      created_at: now,
+      updated_at: now,
+    } as NodeRow;
+  }
+  state.upsertNode(briefNoteNode);
+
   // 5. Mark concept card as done (patch only — never rewrite position)
   useCanvas.getState().updateNode(conceptCardId, {
     status: "ready",
@@ -551,6 +686,13 @@ export async function generateWorkflow(
   });
 
   return group;
+  } catch (err) {
+    useCanvas.getState().updateNode(conceptCardId, {
+      status: "ready",
+      metadata: { ...meta, concept_state: "idle" },
+    });
+    throw err;
+  }
 }
 
 const MOCK = [

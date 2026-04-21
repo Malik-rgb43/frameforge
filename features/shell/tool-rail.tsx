@@ -8,7 +8,6 @@ import {
   Hand,
   Type,
   ImagePlus,
-  Link,
   Lightbulb,
   Download,
   Zap,
@@ -34,7 +33,6 @@ const TOOLS: Tool[] = [
   { id: "select", label: "Select", hint: "Select and move nodes. Shift+click to multi-select, drag to box-select", icon: MousePointer2, shortcut: "V" },
   { id: "hand", label: "Pan", hint: "Pan the canvas by dragging", icon: Hand, shortcut: "Space" },
   { id: "image", label: "Add image", hint: "Upload an image from your device", icon: ImagePlus, shortcut: "U" },
-  { id: "chain", label: "Next Shot", hint: "Add a continuation shot connected to the selected shot (for storyboard sequences)", icon: Link, shortcut: "⌘→" },
   { id: "download", label: "Export", hint: "Download selected images or export the board", icon: Download, shortcut: "⌘S" },
 ];
 

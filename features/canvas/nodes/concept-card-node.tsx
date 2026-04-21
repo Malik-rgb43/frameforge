@@ -15,6 +15,7 @@ import {
   generateWorkflow,
   suggestConceptIdeas,
   getConnectedRefImages,
+  type ConceptSuggestion,
 } from "@/features/concept-card/concept-card-logic";
 import type { NodeRow } from "@/lib/supabase/types";
 
@@ -46,7 +47,7 @@ export default function ConceptCardNode({
   const meta = (row.metadata ?? {}) as {
     idea?: string;
     concept_state?: "idle" | "suggesting" | "ready" | "generating" | "done";
-    suggestions?: string[];
+    suggestions?: ConceptSuggestion[];
     duration_sec?: number;
     shot_count?: number;
     aspect?: string;
@@ -56,8 +57,9 @@ export default function ConceptCardNode({
   const [idea, setIdea] = useState(meta.idea ?? "");
   const [durationSec, setDurationSec] = useState(meta.duration_sec ?? 15);
   const [aspect, setAspect] = useState(meta.aspect ?? "9:16");
+  const [imageModel, setImageModel] = useState((meta as { image_model?: string }).image_model ?? "gemini-2.0-flash-exp-image-generation");
   const [suggesting, setSuggesting] = useState(false);
-  const [suggestions, setSuggestions] = useState<string[]>(
+  const [suggestions, setSuggestions] = useState<ConceptSuggestion[]>(
     meta.suggestions ?? []
   );
   const state = meta.concept_state ?? "idle";
@@ -78,7 +80,7 @@ export default function ConceptCardNode({
       const ideas = await suggestConceptIdeas(idea || "", refImages);
       setSuggestions(ideas);
       updateNode(row.id, {
-        metadata: { ...meta, suggestions: ideas },
+        metadata: { ...meta, suggestions: ideas } as unknown as import("@/lib/supabase/types").Json,
         updated_at: new Date().toISOString(),
       });
     } finally {
@@ -92,6 +94,7 @@ export default function ConceptCardNode({
       duration_sec: durationSec,
       shot_count: shotsFromDuration(durationSec),
       aspect,
+      image_model: imageModel,
     });
     try {
       await generateWorkflow(row.id);
@@ -113,13 +116,13 @@ export default function ConceptCardNode({
           ? "border border-accent-violet shadow-[0_0_0_1px_rgba(167,139,250,0.5),0_8px_32px_rgba(167,139,250,0.2)]"
           : "border border-accent-violet/25 shadow-[0_4px_24px_rgba(0,0,0,0.4)]"
       )}
-      style={{ width: row.w ?? 300 }}
+      style={{ width: row.w ?? 320 }}
     >
       {/* Top glow line */}
       <div className="h-[2px] w-full bg-gradient-to-r from-transparent via-accent-violet to-transparent" />
 
       {/* Header */}
-      <div className="px-4 pt-3 pb-2.5 bg-gradient-to-b from-accent-violet/10 to-transparent">
+      <div className="px-4 pt-3.5 pb-3 bg-gradient-to-b from-accent-violet/10 to-transparent">
         <div className="flex items-center gap-2.5">
           <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-accent-violet/30 to-accent-violet/10 border border-accent-violet/25 flex items-center justify-center flex-shrink-0">
             <Film className="w-3.5 h-3.5 text-accent-violet" />
@@ -137,44 +140,66 @@ export default function ConceptCardNode({
                 : "Idea → storyboard"}
             </div>
           </div>
-          {!isDone && !isGen && (
-            <div className="px-2 py-0.5 rounded-full bg-accent-violet/10 border border-accent-violet/20 text-[9px] font-mono text-accent-violet whitespace-nowrap">
-              {shotCount} shots
-            </div>
-          )}
         </div>
       </div>
 
       {/* Body */}
-      <div className="nodrag px-3 pt-1 pb-3 flex flex-col gap-2">
+      <div className="nodrag px-3.5 pt-1 pb-3 flex flex-col gap-3">
         {isGen ? (
-          /* Generating */
-          <div className="flex flex-col items-center gap-3 py-6">
-            <div className="relative w-10 h-10">
-              <div className="absolute inset-0 rounded-full bg-accent-violet/15 animate-ping" />
-              <div className="w-10 h-10 rounded-full bg-accent-violet/10 border border-accent-violet/25 flex items-center justify-center relative">
-                <Loader2 className="w-4 h-4 text-accent-violet animate-spin" />
+          /* Generating — rich treatment */
+          <div className="flex flex-col gap-4 py-5">
+            {/* Pulsing orb */}
+            <div className="flex justify-center">
+              <div className="relative w-12 h-12">
+                <div
+                  className="absolute inset-0 rounded-full bg-accent-violet/20 animate-ping"
+                  style={{ animationDuration: "2s" }}
+                />
+                <div className="absolute inset-[3px] rounded-full bg-accent-violet/10 border border-accent-violet/30 flex items-center justify-center">
+                  <Loader2 className="w-5 h-5 text-accent-violet animate-spin" />
+                </div>
               </div>
             </div>
-            <div className="text-center">
-              <div className="text-xs font-medium text-text-primary">
+            {/* Progress label */}
+            <div className="text-center space-y-1">
+              <div className="text-xs font-semibold text-text-primary">
                 Generating {shotCount} shots
               </div>
-              <div className="text-[10px] text-text-muted mt-0.5">
-                Building images for each scene…
+              <div className="text-[10px] text-text-muted">
+                Building storyboard + images…
               </div>
+            </div>
+            {/* Cancel */}
+            <div className="flex justify-center">
+              <button
+                onClick={() =>
+                  updateNode(row.id, {
+                    status: "ready",
+                    metadata: { ...meta, concept_state: "idle" } as unknown as import("@/lib/supabase/types").Json,
+                    updated_at: new Date().toISOString(),
+                  })
+                }
+                className="text-[10px] text-text-muted hover:text-text-secondary border border-border-subtle/50 rounded-md px-3 py-1 hover:border-border-subtle transition-colors"
+              >
+                Cancel
+              </button>
             </div>
           </div>
         ) : isDone ? (
-          /* Done */
-          <div className="flex flex-col gap-2 pt-1">
-            <div className="text-[11px] text-text-secondary leading-relaxed">
+          /* Done — card-inside-card treatment */
+          <div className="flex flex-col gap-3 pt-1.5">
+            <div className="text-xs font-medium text-text-primary leading-relaxed">
               {meta.idea}
             </div>
             {meta.concept_brief && (
-              <div className="rounded-xl bg-canvas/60 border border-border-subtle/50 p-2.5">
-                <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1">
-                  Brief
+              <div className="rounded-xl bg-canvas/60 border border-border-subtle/50 border-l-2 border-l-accent-violet/40 pl-2.5 pr-2.5 py-2.5">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider">
+                    Creative Brief
+                  </div>
+                  <div className="px-1.5 py-px rounded-full bg-accent-violet/10 border border-accent-violet/20 text-[8px] font-mono text-accent-violet">
+                    ready
+                  </div>
                 </div>
                 <div className="text-[10px] text-text-secondary leading-relaxed max-h-[120px] overflow-y-auto">
                   {meta.concept_brief}
@@ -183,7 +208,7 @@ export default function ConceptCardNode({
             )}
             <button
               onClick={() => saveMeta({ concept_state: "idle" })}
-              className="flex items-center gap-1.5 text-[10px] text-accent-violet/70 hover:text-accent-violet transition-colors w-fit mt-0.5"
+              className="flex items-center justify-center gap-1.5 text-[10px] text-accent-violet/80 hover:text-accent-violet border border-accent-violet/25 hover:border-accent-violet/50 rounded-lg px-3 py-1.5 transition-all w-full mt-0.5"
             >
               <RefreshCw className="w-2.5 h-2.5" />
               Edit &amp; regenerate
@@ -191,59 +216,80 @@ export default function ConceptCardNode({
           </div>
         ) : (
           <>
-            {/* Textarea with inline suggest button */}
-            <div className="relative">
-              <textarea
-                value={idea}
-                onChange={(e) => setIdea(e.target.value)}
-                onBlur={() => saveMeta({ idea })}
-                rows={3}
-                dir="auto"
-                placeholder="Describe the concept…"
-                className="w-full bg-canvas/50 rounded-xl px-2.5 py-2 pr-8 text-[11px] text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent-violet/30 resize-none leading-relaxed border border-border-subtle/50 focus:border-accent-violet/20"
-              />
-              <button
-                onClick={runSuggest}
-                disabled={suggesting}
-                className="absolute top-2 right-2 w-5 h-5 rounded-md bg-accent-violet/15 hover:bg-accent-violet/30 flex items-center justify-center transition-colors"
-                title="Suggest ideas"
-              >
-                {suggesting ? (
-                  <Loader2 className="w-3 h-3 text-accent-violet animate-spin" />
-                ) : (
-                  <Sparkles className="w-3 h-3 text-accent-violet" />
-                )}
-              </button>
+            {/* Idea textarea */}
+            <div>
+              <div className="text-[9px] font-mono text-text-muted uppercase tracking-wider mb-1.5">
+                Concept Idea
+              </div>
+              <div className="relative">
+                <textarea
+                  value={idea}
+                  onChange={(e) => setIdea(e.target.value)}
+                  onBlur={() => saveMeta({ idea })}
+                  rows={4}
+                  dir="auto"
+                  placeholder="What's the big idea? Describe the scene, emotion, or hook…"
+                  className="w-full bg-canvas/50 rounded-xl px-2.5 py-2 pr-8 text-[11px] text-text-primary placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent-violet/30 resize-none leading-relaxed border border-border-subtle/50 focus:border-accent-violet/20"
+                />
+                <button
+                  onClick={runSuggest}
+                  disabled={suggesting}
+                  className="absolute top-2 right-2 w-5 h-5 rounded-md bg-accent-violet/15 hover:bg-accent-violet/30 flex items-center justify-center transition-colors"
+                  title="Suggest ideas"
+                >
+                  {suggesting ? (
+                    <Loader2 className="w-3 h-3 text-accent-violet animate-spin" />
+                  ) : (
+                    <Sparkles className="w-3 h-3 text-accent-violet" />
+                  )}
+                </button>
+              </div>
             </div>
 
-            {/* Suggestion chips */}
+            {/* Concept suggestion cards */}
             {suggestions.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {suggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => {
-                      setIdea(s);
-                      saveMeta({ idea: s });
-                    }}
-                    className={cn(
-                      "text-[9px] px-2 py-0.5 rounded-full border transition-all leading-tight",
-                      idea === s
-                        ? "bg-accent-violet/20 border-accent-violet/50 text-accent-violet"
-                        : "bg-canvas/50 border-border-subtle/40 text-text-muted hover:text-text-secondary hover:border-border-subtle"
-                    )}
-                  >
-                    {s}
-                  </button>
-                ))}
+              <div className="flex flex-col gap-1.5">
+                {suggestions.map((s, i) => {
+                  const combined = `${s.title}: ${s.description}`;
+                  const isActive = idea === combined;
+                  return (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        setIdea(combined);
+                        saveMeta({ idea: combined });
+                      }}
+                      className={cn(
+                        "text-left px-2.5 py-2 rounded-xl border transition-all",
+                        isActive
+                          ? "bg-accent-violet/15 border-accent-violet/50"
+                          : "bg-canvas/50 border-border-subtle/40 hover:border-accent-violet/30 hover:bg-accent-violet/5"
+                      )}
+                    >
+                      <div className={cn("text-[10px] font-semibold mb-0.5", isActive ? "text-accent-violet" : "text-text-primary")}>
+                        {s.title}
+                      </div>
+                      <div className="text-[9px] text-text-muted leading-relaxed line-clamp-3">
+                        {s.description}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
-            {/* Duration + Aspect controls */}
-            <div className="flex items-center gap-1.5">
+            {/* Compact controls bar */}
+            <div className="flex items-center gap-2 pt-0.5">
+              {/* Shot count badge */}
+              <div className="text-[9px] font-mono text-accent-violet/80 px-2 py-1 rounded-md bg-accent-violet/10 border border-accent-violet/20 whitespace-nowrap">
+                {shotCount} shots
+              </div>
+
+              <div className="flex-1" />
+
               {/* Duration segmented */}
               <div className="flex items-center rounded-lg overflow-hidden border border-border-subtle/50 bg-canvas/40">
-                {[6, 9, 15, 30, 45, 60].map((d) => (
+                {[6, 15, 30, 60].map((d) => (
                   <button
                     key={d}
                     onClick={() => {
@@ -265,9 +311,7 @@ export default function ConceptCardNode({
                 ))}
               </div>
 
-              <div className="flex-1" />
-
-              {/* Aspect ratio icon buttons */}
+              {/* Aspect ratio */}
               <div className="flex items-center rounded-lg overflow-hidden border border-border-subtle/50 bg-canvas/40">
                 {["9:16", "1:1", "16:9"].map((a) => (
                   <button
@@ -289,13 +333,40 @@ export default function ConceptCardNode({
                 ))}
               </div>
             </div>
+
+            {/* Model selector */}
+            <div className="flex items-center gap-1.5">
+              <span className="text-[9px] text-text-muted font-mono">Model</span>
+              <div className="flex items-center rounded-lg overflow-hidden border border-border-subtle/50 bg-canvas/40">
+                {[
+                  { id: "gemini-2.0-flash-exp-image-generation", label: "Flash" },
+                  { id: "gemini-2.0-flash-preview-image-generation", label: "Pro" },
+                ].map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => {
+                      setImageModel(m.id);
+                      saveMeta({ image_model: m.id });
+                    }}
+                    className={cn(
+                      "px-2 h-[22px] text-[9px] font-mono transition-all",
+                      imageModel === m.id
+                        ? "bg-accent-violet/25 text-accent-violet"
+                        : "text-text-muted hover:text-text-secondary hover:bg-white/5"
+                    )}
+                  >
+                    {m.label}
+                  </button>
+                ))}
+              </div>
+            </div>
           </>
         )}
       </div>
 
       {/* Generate button */}
       {!isDone && (
-        <div className="nodrag px-3 pb-3">
+        <div className="nodrag px-3.5 pb-3.5">
           <button
             onClick={runGenerate}
             disabled={!canGenerate}
@@ -311,7 +382,11 @@ export default function ConceptCardNode({
             ) : (
               <Wand2 className="w-3.5 h-3.5" />
             )}
-            {isGen ? "Generating…" : `Generate ${shotCount} shots`}
+            {isGen
+              ? "Generating…"
+              : canGenerate
+              ? `Generate ${shotCount} shots`
+              : "Enter an idea to generate"}
           </button>
         </div>
       )}
@@ -334,6 +409,12 @@ export default function ConceptCardNode({
         type="source"
         position={Position.Bottom}
         id="source-bottom"
+        className="!w-4 !h-4 !bg-accent-violet hover:!bg-white !border-2 !border-panel transition-colors"
+      />
+      <Handle
+        type="source"
+        position={Position.Right}
+        id="source-right"
         className="!w-4 !h-4 !bg-accent-violet hover:!bg-white !border-2 !border-panel transition-colors"
       />
     </div>

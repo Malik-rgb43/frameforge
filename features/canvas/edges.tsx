@@ -10,7 +10,7 @@ import { BaseEdge, getBezierPath, type EdgeProps } from "reactflow";
 const STYLE_MAP = {
   solid: { stroke: "#3A3A44", dash: "0", strokeWidth: 1.5, animated: false },
   dashed: { stroke: "#5A5D6A", dash: "4 4", strokeWidth: 1.5, animated: false },
-  arrow: { stroke: "#A78BFA", dash: "6 3", strokeWidth: 1.8, animated: true },
+  arrow: { stroke: "#A78BFA", dash: "0", strokeWidth: 2, animated: false },
 } as const;
 
 export default function FfEdge(props: EdgeProps) {
@@ -26,7 +26,7 @@ export default function FfEdge(props: EdgeProps) {
     targetX,
     targetY,
     targetPosition,
-    curvature: 0.35,
+    curvature: 0.2,
   });
 
   return (

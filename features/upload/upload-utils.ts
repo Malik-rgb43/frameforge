@@ -26,14 +26,17 @@ function findFreeSpot(nodes: NodeRow[]): { x: number; y: number } {
   return { x: 120, y: 80 };
 }
 
-export async function uploadImagesAsSources(files: File[]): Promise<NodeRow[]> {
+export async function uploadImagesAsSources(
+  files: File[],
+  position?: { x: number; y: number }
+): Promise<NodeRow[]> {
   const state = useCanvas.getState();
   if (!state.boardId) throw new Error("no board loaded");
 
   const adapter = await getDataAdapter();
   const created: NodeRow[] = [];
   const now = new Date().toISOString();
-  const startSpot = findFreeSpot(state.nodes);
+  const startSpot = position ?? findFreeSpot(state.nodes);
 
   let offsetX = 0;
   for (const file of files) {
@@ -57,23 +60,28 @@ export async function uploadImagesAsSources(files: File[]): Promise<NodeRow[]> {
       quality_score: null,
       metadata: { uploaded: true, size_bytes: file.size },
     };
+
+    // Show optimistically before adapter call
+    const optimisticId = uid();
+    const optimistic: NodeRow = {
+      ...input,
+      id: optimisticId,
+      animation_prompt: null,
+      animation_model_hint: null,
+      used_ref_ids: null,
+      created_at: now,
+      updated_at: now,
+    };
+    state.upsertNode(optimistic);
+
     try {
       const saved = await adapter.createNode(input);
+      // Replace optimistic node with persisted one
+      state.removeNode(optimisticId);
       state.upsertNode(saved);
       created.push(saved);
     } catch {
-      // Fallback: add to Zustand only (mock adapter still works, but be resilient)
-      const local: NodeRow = {
-        ...input,
-        id: uid(),
-        animation_prompt: null,
-        animation_model_hint: null,
-        used_ref_ids: null,
-        created_at: now,
-        updated_at: now,
-      };
-      state.upsertNode(local);
-      created.push(local);
+      created.push(optimistic);
     }
     offsetX += 240;
   }

@@ -35,11 +35,12 @@ export default function DropZone() {
         f.type.startsWith("image/")
       );
       if (files.length === 0) return;
-      try {
-        await uploadImagesAsSources(files);
-      } catch (err) {
-        console.error("upload failed", err);
-      }
+      // Dispatch with screen coords so canvas can convert to flow coords
+      window.dispatchEvent(
+        new CustomEvent("ff:drop-files", {
+          detail: { files, clientX: e.clientX, clientY: e.clientY },
+        })
+      );
     },
     []
   );

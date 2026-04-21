@@ -11,14 +11,12 @@ import {
   Lightbulb,
   Zap,
   Sparkles,
-  Link as LinkIcon,
   AlignJustify,
   DollarSign,
   LayoutGrid,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCanvas } from "./store";
-import { createContinuation } from "@/features/continuity/next-shot";
 import {
   createConceptCard,
   groupSelectedNodes,
@@ -275,14 +273,6 @@ export default function CanvasContextMenu({ onEnhance, onMagicExpand }: Props) {
                   onClick={() => act(() => onMagicExpand?.(node.id))}
                 />
               </>
-            )}
-            {(node.type === "shot" || node.type === "continuation") && (
-              <MenuItem
-                icon={LinkIcon}
-                label="Create next shot"
-                hint="⌘→"
-                onClick={() => act(() => createContinuation(node.id))}
-              />
             )}
             <Divider />
             <MenuItem icon={Copy} label="Duplicate" hint="⌘D" onClick={() => act(duplicate)} />

@@ -158,8 +158,8 @@ export const useCanvas = create<CanvasState>()(
       // Persist position change to the data adapter (fire-and-forget)
       import("@/lib/data-adapter").then(({ getDataAdapter }) =>
         Promise.resolve(getDataAdapter()).then((adapter) =>
-          adapter.updateNode(id, { x, y }).catch(() => {
-            // Ignore persistence errors — position stays in memory
+          adapter.updateNode(id, { x, y }).catch((err) => {
+            console.error('[moveNode] position save failed:', err);
           })
         )
       );
@@ -187,7 +187,7 @@ export const useCanvas = create<CanvasState>()(
         board_id: boardId,
         source_node_id: sourceId,
         target_node_id: targetId,
-        style: "arrow",
+        style: "solid",
         label: null,
         created_at: new Date().toISOString(),
       };
@@ -201,7 +201,7 @@ export const useCanvas = create<CanvasState>()(
               board_id: boardId,
               source_node_id: sourceId,
               target_node_id: targetId,
-              style: "arrow",
+              style: "solid",
               label: null,
             })
             .then((saved) => {

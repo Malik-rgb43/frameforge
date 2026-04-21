@@ -30,7 +30,6 @@ const SECTIONS: { heading: string; items: { keys: string[]; label: string }[] }[
     heading: "Node",
     items: [
       { keys: ["Dbl-click"], label: "Inspect" },
-      { keys: ["⌘", "→"], label: "Create next shot" },
       { keys: ["Del"], label: "Delete" },
       { keys: ["⌘", "D"], label: "Duplicate" },
       { keys: ["⌘", "B"], label: "Toggle Board ⇄ Storyboard" },

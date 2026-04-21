@@ -89,6 +89,11 @@ export async function applyConceptToBoard(concept: ConceptUI): Promise<void> {
   const allNodes = [...sourceNodes, ...shotNodes];
   allNodes.forEach((n) => state.upsertNode(n));
 
+  // Select first source node so the canvas pans to the newly inserted concept area
+  if (allNodes.length > 0) {
+    state.setSelectedIds([allNodes[0].id]);
+  }
+
   // Edges — each shot connects to 1-3 source nodes (round-robin)
   const edges: EdgeRow[] = [];
   shotNodes.forEach((shot, i) => {

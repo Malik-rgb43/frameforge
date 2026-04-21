@@ -132,6 +132,8 @@ Output: photorealistic, 35mm film feel, cinematic commercial polish.`;
         updated_at: new Date().toISOString(),
       } as NodeRow;
     }
+    // Select the new node so the canvas focuses it
+    state.setSelectedIds([targetNode.id]);
   } else {
     // Flip the source node into "generating" state in place
     targetNode = { ...source, status: "generating" as const };

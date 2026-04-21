@@ -22,7 +22,6 @@ import ConceptsPanel from "@/features/concepts/concepts-panel";
 import { useConcepts } from "@/features/concepts/store";
 import StoryboardView from "@/features/storyboard/storyboard-view";
 import SimpleNewProject from "@/features/wizard/simple-new-project";
-import { createContinuation } from "@/features/continuity/next-shot";
 import DropZone from "@/features/upload/drop-zone";
 import CanvasContextMenu from "@/features/canvas/context-menu";
 import { createConceptCard } from "@/features/concept-card/concept-card-logic";
@@ -133,11 +132,6 @@ export default function StudioPage({ params }: { params: { id: string } }) {
         case "concepts":
           setConceptsOpen(true);
           return;
-        case "chain": {
-          const id = selectedNodeIds[0];
-          if (id) createContinuation(id).catch((e) => console.error(e));
-          return;
-        }
         case "image": {
           const files = await pickFiles();
           if (files.length > 0)
@@ -146,6 +140,7 @@ export default function StudioPage({ params }: { params: { id: string } }) {
         }
         case "conceptcard": {
           await createConceptCard();
+          setTool("select");
           return;
         }
         case "download": {
