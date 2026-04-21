@@ -192,32 +192,40 @@ export async function suggestConceptIdeas(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemPrompt: `You are a senior creative director at a top direct-response agency. Your job is to generate AD CONCEPTS — not shot descriptions, not taglines, not product features.
+        systemPrompt: `You are a senior creative director at a top direct-response agency with 15+ years of high-converting short-form video ads. Your job: generate ORIGINAL AD CONCEPTS — not mood boards, not shot descriptions, not product features.
 
-A CONCEPT is the big creative idea that holds the whole ad together. It answers: WHAT IS THIS AD REALLY ABOUT? What human truth, emotion, or cultural moment does it tap into? What's the creative territory?
+A CONCEPT is the single creative idea that holds an entire ad together. It answers: WHAT IS THIS AD REALLY ABOUT beneath the surface?
 
-For EACH concept write:
-- title: 3-5 word campaign-level title (the idea name, not a product description)
-- description: 4-5 sentences covering ALL of these:
-  (1) THE BIG IDEA — the creative territory in one bold sentence. What is this ad REALLY about? Not the product — the human truth underneath it.
-  (2) THE HOOK STRATEGY — what stops the scroll and WHY it works psychologically. Not what you see — why it works.
-  (3) THE NARRATIVE ARC — how does the story move? What does the viewer feel at frame 1 vs. the last frame? What's the emotional journey?
-  (4) THE TONE & WORLD — what does this ad feel like? Raw UGC? Cinematic editorial? Fairy-tale surreal? Name the visual language.
-  (5) THE INSIGHT — the audience truth that makes this land. Why will THIS person stop scrolling for THIS concept specifically?
+CRITICAL — REFERENCE IMAGES:
+If reference images are attached, treat them as MOOD AND AESTHETIC direction ONLY.
+- Do NOT describe what you see in the images
+- Do NOT recreate their scenes or scenarios
+- Use only: the emotional register, the color temperature, the pacing feel
+- Your concepts must be 100% ORIGINAL — new scenes, new angles, new human moments
 
-IMPORTANT RULES:
-- Think like a concept, not a shot. "A mom at 3am" is a SHOT. "The loneliness of loving someone so much you'd do anything for them" is a CONCEPT.
-- Each concept must tap a DIFFERENT emotional territory (e.g. relief, pride, nostalgia, fear, aspiration)
-- The product does NOT need to appear in every concept. Great ads use cultural references — fairy tales, movie moments, shared human experiences — as the creative vehicle
-- REJECT: product feature lists, shot descriptions, taglines without strategy behind them
+For EACH concept output:
+- title: 3-5 word creative campaign title (the IDEA name, not a product description)
+- description: 5-6 sentences that MUST cover all of these in order:
+  (1) THE HUMAN TRUTH — what universal human experience is this ad hijacking? Not the product benefit — the raw, specific emotion underneath. Name it precisely.
+  (2) THE OPENING FRAME — describe the single, hyper-specific visual that opens the ad. Not "a person looking sad." Name exactly what the camera sees in the first 0.5 seconds. Make it surprising.
+  (3) THE NARRATIVE PIVOT — what unexpected turn does the ad take? The moment the viewer thinks one thing but the ad does another. Where is the pattern-interrupt?
+  (4) THE EMOTIONAL ARC — how does the viewer FEEL at frame 1 vs. the last frame? Describe the emotional state shift, not the plot.
+  (5) WHY THIS CONVERTS — what specific mechanism makes someone stop scrolling AND click? Name the psychological trigger (fear, FOMO, identity, relief, social proof, curiosity gap, etc.)
+
+CREATIVE RULES (non-negotiable):
+- Each concept must mine a DIFFERENT emotional territory: use any of (isolation, shame, aspiration, nostalgia, pride, relief, fear, desire, belonging, identity)
+- Product appears in MAX 2-3 shots out of 6. Great ads are 80% story, 20% product.
+- Cultural references (fairy tales, movie archetypes, childhood rituals) are encouraged — they create instant emotional shortcuts
+- REJECT: anything generic, any concept that could apply to ANY product, any concept without a specific opening frame
+- REJECT: concepts that just describe the product or its features
 
 Return JSON only: {"ideas":[{"title":"...","description":"..."},{"title":"...","description":"..."},{"title":"...","description":"..."},{"title":"...","description":"..."}]}`,
         userPrompt: `${briefCtx}
 
-${productContext ? `ADDITIONAL CONTEXT: ${productContext}` : ""}
-${refCount > 0 ? `REFERENCE IMAGES: ${refCount} attached — read their mood, palette, and style as creative direction.` : ""}
+${productContext ? `PRODUCT/CAMPAIGN CONTEXT: ${productContext}` : ""}
+${refCount > 0 ? `STYLE REFERENCE: ${refCount} image(s) attached. Use ONLY for aesthetic/mood direction — do NOT recreate their content. Your concepts must be entirely original.` : ""}
 
-Generate exactly 4 concepts. Each must have a different hook mechanism and target a different avatar. Be specific — name exact visuals, moments, and emotional beats. JSON only.`,
+Generate exactly 4 concepts. Each must be genuinely distinct — different emotional territory, different hook mechanism, different avatar. Push past the obvious first idea. JSON only.`,
         responseMimeType: "application/json",
         action: "concept-card.suggest",
         images: refImages?.map((img) => ({ inlineData: { mimeType: img.mimeType, data: img.base64 } })),
@@ -267,33 +275,37 @@ export async function generateShotList(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemPrompt: `You are a senior director of photography and short-form ad editor. Break this concept into ${shotCount} precise, shootable shots for a direct-response video ad.
+        systemPrompt: `You are a senior director of photography and short-form ad editor with credits on campaigns that have generated millions in direct-response revenue. Break this concept into ${shotCount} ORIGINAL, precise, shootable shots for a direct-response video ad.
 
-SHOT STRUCTURE LAW:
-- Shot 1 = HOOK. Must deliver payoff in <0.5 seconds. No build-up. Pattern interrupt, extreme close-up, or direct problem naming. If it doesn't stop a scroll, it fails.
-- Middle shots = STORY/PROOF. Can be narrative beats, cultural references, emotional moments, or product proof — product does NOT need to appear in every shot. Great ads reference familiar stories (a fairy tale sequence, an iconic movie scene, a relatable human moment) as creative frameworks. Visual storytelling > product placement.
-- Last shot = REVEAL/CTA. Clear outcome or click trigger. Not a text card unless unavoidable.
+CRITICAL — ORIGINALITY REQUIREMENT:
+You are creating a STORYBOARD for an ORIGINAL ad. Do NOT reproduce, reference, or recreate any existing footage, stock imagery, or reference images. Every shot must be an original visual concept that could be shot fresh by a production team.
 
-For EACH shot output these exact fields:
-- title: 3-5 word working title
-- purpose: hook | setup | reveal | proof | cta
-- visualDescription: 2 sentences max, hyper-specific and cinematic. Name the subject, the exact moment, the environment detail. NO "product on surface", NO "person smiling", NO vague descriptions.
-- cameraDirective: lens (e.g. "85mm") + angle + shot type + camera movement (e.g. "low-angle medium, slow dolly-in 2px/frame")
-- lightingDirective: key source type + direction + quality + color temp (e.g. "soft window light from left, warm 3200K, no fill")
-- durationSeconds: 1-4 (impulse products: keep fast; services/considered: allow 3-4s)
-- motionPrompt: image-to-video directive under 50 words. Camera movement + subject action + final beat. Cinematographer language only.
+SHOT ARCHITECTURE (non-negotiable structure):
+- Shot 1 = SCROLL-STOPPER HOOK. Payoff in under 0.5 seconds. Options: extreme close-up with unexpected detail, direct confrontation with a problem the viewer recognizes, a visual mismatch that creates cognitive dissonance, an unexpected juxtaposition. NO setup, NO slow burns. If a stranger wouldn't pause their scroll for this first frame, it fails.
+- Shots 2-N-1 = THE STORY ENGINE. Narrative beats, emotional proof, problem-solution arc. Product appears in 2-3 shots maximum — the story carries the rest. Use unexpected creative vehicles: a recurring visual motif, a visual callback, a perspective shift. Each shot must EARN its edit — if it can be cut without losing the story, cut it.
+- Last shot = RESOLUTION + DESIRE. The viewer must feel: "I need this." Create this through before/after contrast, social proof framing, or a visual reward that pays off the opening hook.
 
-Platform pacing: TikTok/Reels = fast cuts 1-2s each. Meta feed = allow 2-3s for proof shots.
-Authenticity markers (use these): handheld micro-movements, slight film grain, imperfect natural light, real textures.
-REJECT: generic AI faces, excessive overlays, visual noise, motion-blur overuse.
-CREATIVE DIRECTION: The best ads don't show the product in every frame. A concept can open with a Rapunzel-style scene, a cinematic nature reference, or a human emotional moment — then cut to the product. Think: story first, product second.
+For EACH shot, output exactly these fields:
+- title: 3-5 word working title that captures the EMOTIONAL beat, not the visual description
+- purpose: hook | setup | tension | proof | reveal | cta
+- visualDescription: 2-3 sentences. Be a cinematographer briefing a camera operator. Name: (1) EXACTLY what fills the frame — subject, position, expression, action; (2) the specific environment detail that creates context; (3) the ONE thing in this frame the viewer will remember. FORBIDDEN: "person smiling", "product on surface", "woman looking happy", anything stock-photo-generic.
+- cameraDirective: lens focal length + camera angle + shot type + specific movement with speed. Example: "35mm, low-angle (15° off ground), wide medium — slow push-in at 2px/frame over 3s, locks off on product"
+- lightingDirective: key light source type + direction + quality (hard/soft/diffused) + color temperature + any practical lights in shot. Example: "harsh tungsten practical from above-left, 2700K, no fill — hard shadow falls left, creates isolation"
+- durationSeconds: 1–4 (TikTok/Reels: 1-2s for hook+tension; 2-3s for proof; 3-4s for reveal)
+- motionPrompt: under 60 words. Exactly: opening camera/subject state → primary movement or action → the beat it ends on. Cinematographer language ONLY. Example: "Opens locked off on extreme close of clasped hands — slow rack focus to face behind, 3 seconds — at 2s hands release, revealing product drop to table, camera holds as product settles."
+
+CRAFT STANDARDS:
+- Authenticity > polish: handheld micro-shake, natural imperfect light, real textures beat studio-clean every time
+- Emotional specificity > generic beauty: the specific muscle twitch of holding back tears > "sad face"
+- Compositional tension: use negative space, off-center framing, partial reveals to create visual intrigue
+- REJECT: symmetrical "flat lay" product shots, faces without readable emotion, generic outdoor lifestyle, white-background anything
 
 Return JSON only: {"shots":[{...}]}`,
         userPrompt: `${briefCtx}
 
-CONCEPT: ${idea}
+CONCEPT TO EXECUTE: ${idea}
 
-Build ${shotCount} shots. Shot 1 is the hook (payoff in <0.5s). JSON only.`,
+Build exactly ${shotCount} shots. Shot 1 must work as a standalone scroll-stopper in the first 0.5s. Every shot must serve the concept — if it can be cut, cut it. JSON only.`,
         responseMimeType: "application/json",
         action: "concept-card.shot-list",
       }),
@@ -337,17 +349,17 @@ async function generateConceptBrief(
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        systemPrompt: `You are a senior creative director writing the creative brief for a direct-response video ad. This brief will guide the entire production — so be specific, inspiring, and honest about what makes this concept work.
+        systemPrompt: `You are a senior creative director writing the production brief for a direct-response video ad. This brief goes to the director and editor on day one — it is the creative north star for every decision on set and in the edit.
 
-Write 130–180 words of flowing prose. Cover:
-1. The core creative idea — what is the one thing this ad says/shows
-2. The visual spine — the single image or moment that defines the whole piece
-3. The emotional arc — how the viewer feels from frame 1 to the last frame
-4. Tone and aesthetic — is it raw/UGC, cinematic, editorial, energetic, calm?
-5. The hook mechanic — how does frame 1 earn the next 3 seconds
-6. Why this concept converts — what makes a viewer stop, watch, and click
+Write 150–200 words of professional prose. No bullet lists. No headers. Cover ALL of the following without labeling them:
+1. The single core human truth this ad taps — the raw, specific emotion underneath the product
+2. The visual spine — the ONE image, object, or recurring motif that holds the whole ad together visually
+3. The emotional journey — what the viewer feels at frame 1 (the disruption), mid-ad (the story), and last frame (the resolution/desire)
+4. The tone and aesthetic world — name the visual language precisely: raw vérité? cold desaturated drama? warm intimate UGC? hyper-stylized fantasy?
+5. The hook architecture — why the opening frame earns the next 3 seconds, what psychological mechanism it uses
+6. The conversion logic — the exact moment the viewer shifts from "this is interesting" to "I need this" and why that moment works
 
-No bullet lists. No headers. Professional prose only. Write as if briefing a director on set.`,
+Write in present tense. Write as if you're on set, briefing the director 10 minutes before the first shot. Be direct, opinionated, and specific. Vague is useless.`,
         userPrompt: `${briefCtx}
 
 CONCEPT: ${idea}
@@ -622,11 +634,37 @@ export async function generateWorkflow(
     if (options?.signal?.aborted) break;
     const shot = createdShots[i];
     try {
+      // Build a rich, cinematography-grade prompt for the image model.
+      // We explicitly separate "what to create" (the shot) from "style reference"
+      // (the attached images) so the model creates original work, not a copy.
+      const shotMeta = (shot.metadata ?? {}) as {
+        purpose?: string;
+        durationSeconds?: number;
+        animation_prompt?: string;
+      };
+      const imagePrompt = [
+        `DIRECT-RESPONSE AD STILL — ORIGINAL CREATIVE CONCEPT`,
+        `Shot ${i + 1} of ${createdShots.length}: ${shot.title ?? ""}`,
+        ``,
+        `SCENE: ${shot.prompt ?? ""}`,
+        shot.prompt_enhanced ? `CINEMATIC DETAIL: ${shot.prompt_enhanced.split("\n\n")[0]}` : "",
+        shot.prompt_enhanced?.includes("Camera:") ? shot.prompt_enhanced.split("\n\n").slice(1).join("\n") : "",
+        ``,
+        `SHOT ROLE: ${shotMeta.purpose ?? "story"} — ${i === 0 ? "This is the hook frame — must create immediate visceral impact in under 0.5s" : i === createdShots.length - 1 ? "This is the closing frame — must create desire and visual resolution" : "This is a story beat — must carry emotional weight and visual interest"}`,
+        ``,
+        `PRODUCTION STANDARDS:`,
+        `- Commercial photography quality: sharp, intentional composition, not stock-photo generic`,
+        `- Cinematic color grading — not flat or oversaturated`,
+        `- Real textures, authentic imperfection — no airbrushed perfection`,
+        `- Single clear focal point — no visual clutter`,
+        refImages.length > 0 ? `- Reference images attached are STYLE/MOOD DIRECTION ONLY — do NOT recreate their content. Create an entirely original scene in that visual language.` : "",
+      ].filter(Boolean).join("\n");
+
       const res = await internalFetch("/api/nanobanana", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          prompt: shot.prompt_enhanced ?? shot.prompt,
+          prompt: imagePrompt,
           modelId: imageModel,
           aspectRatio: aspect,
           action: "concept-card.workflow-shot",
