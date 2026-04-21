@@ -515,25 +515,19 @@ export async function generateWorkflow(
   // Brief product images first (highest priority slot), then canvas mood refs
   const refImages = [...briefProductRefs, ...canvasRefs].slice(0, 4);
 
-  // 2. Ask Gemini for a shot list first, then generate the concept brief using the real shots.
-  // Brief depends on shots for accurate per-shot referencing, so shots must resolve first.
-  const durationSec = (meta as { duration_sec?: number }).duration_sec ?? 15;
-  const shots = await generateShotList(idea, shotCount);
-  const conceptBrief = await generateConceptBrief(idea, shots, durationSec);
-
-  // 3. Lay out shots HORIZONTALLY BELOW the concept card (exits from bottom handle)
-  // Get fresh card position to avoid stale coords
+  // 2. IMMEDIATELY lay out placeholder shot stubs on the canvas so the user
+  //    sees activity right away — BEFORE waiting for the AI shot-list call.
   const freshCard = useCanvas.getState().nodes.find((n) => n.id === conceptCardId) ?? card;
   const SHOT_W = 200;
   const SHOT_H = 280;
   const GAP = 20;
   const startX = freshCard.x;
   const startY = freshCard.y + (freshCard.h ?? 240) + 80;
+  const durationSec = (meta as { duration_sec?: number }).duration_sec ?? 15;
 
   const createdShots: NodeRow[] = [];
-  for (let i = 0; i < shots.length; i++) {
-    const spec = shots[i];
-    const shotInput: NodeInput = {
+  for (let i = 0; i < shotCount; i++) {
+    const placeholderInput: NodeInput = {
       board_id: state.boardId,
       group_id: group.id,
       type: i === 0 ? "shot" : "continuation",
@@ -544,25 +538,23 @@ export async function generateWorkflow(
       order_index: state.nodes.length + i,
       image_url: null,
       thumbnail_url: null,
-      prompt: spec.visualDescription,
-      prompt_enhanced: `${spec.visualDescription}\n\nCamera: ${spec.cameraDirective}\nLighting: ${spec.lightingDirective}\nPurpose: ${spec.purpose}`,
-      title: spec.title,
+      prompt: null,
+      prompt_enhanced: null,
+      title: i === 0 ? "Hook" : `Shot ${i + 1}`,
       status: "generating",
       quality_score: null,
       metadata: {
-        purpose: spec.purpose,
-        durationSeconds: spec.durationSeconds,
-        animation_prompt: spec.motionPrompt,
+        purpose: i === 0 ? "hook" : i === shotCount - 1 ? "cta" : "reveal",
         from_concept_card: card.id,
       },
     };
 
     let shotNode: NodeRow;
     try {
-      shotNode = await adapter.createNode(shotInput);
+      shotNode = await adapter.createNode(placeholderInput);
     } catch {
       shotNode = {
-        ...shotInput,
+        ...placeholderInput,
         id: uid(),
         created_at: now,
         updated_at: now,
@@ -572,7 +564,7 @@ export async function generateWorkflow(
     createdShots.push(shotNode);
     _createdShotIds.push(shotNode.id);
 
-    // Edge from previous shot → this one (continuity) or from concept card → shot 1
+    // Edge: concept card → shot 1, or previous shot → this shot
     const src = i === 0 ? card : createdShots[i - 1];
     const edgeInput = {
       board_id: state.boardId,
@@ -585,21 +577,47 @@ export async function generateWorkflow(
       const edge = await adapter.createEdge(edgeInput);
       state.upsertEdge(edge);
     } catch {
-      state.upsertEdge({
-        ...edgeInput,
-        id: uid(),
-        created_at: now,
-      } as EdgeRow);
+      state.upsertEdge({ ...edgeInput, id: uid(), created_at: now } as EdgeRow);
     }
   }
 
-  // 3.5 Snap viewport to show the new shot stubs immediately (before waiting for images)
-  // Use a short delay so React has time to commit the upsertNode updates to the DOM.
+  // Snap viewport to show the placeholder stubs before the AI work starts
   if (typeof window !== "undefined") {
     setTimeout(() => window.dispatchEvent(new Event("ff:fit-view")), 80);
   }
 
-  // 4. Generate images per shot (sequentially, with mock fallback)
+  // 3. Now fetch the real shot list + concept brief from AI (placeholders already visible)
+  const shots = await generateShotList(idea, shotCount);
+  const conceptBrief = await generateConceptBrief(idea, shots, durationSec);
+
+  // Update placeholder nodes with real shot data from AI
+  for (let i = 0; i < shots.length && i < createdShots.length; i++) {
+    const spec = shots[i];
+    const shot = createdShots[i];
+    const realData: Partial<NodeRow> = {
+      title: spec.title,
+      prompt: spec.visualDescription,
+      prompt_enhanced: `${spec.visualDescription}\n\nCamera: ${spec.cameraDirective}\nLighting: ${spec.lightingDirective}\nPurpose: ${spec.purpose}`,
+      metadata: {
+        purpose: spec.purpose,
+        durationSeconds: spec.durationSeconds,
+        animation_prompt: spec.motionPrompt,
+        from_concept_card: card.id,
+      } as import("@/lib/supabase/types").Json,
+    };
+    try {
+      const updated = await adapter.updateNode(shot.id, realData);
+      state.upsertNode(updated);
+      // Reflect real data in our local reference for image generation below
+      createdShots[i] = updated;
+    } catch {
+      const merged = { ...shot, ...realData, updated_at: now } as NodeRow;
+      state.upsertNode(merged);
+      createdShots[i] = merged;
+    }
+  }
+
+  // 4. Generate images per shot (sequentially, with error fallback)
   for (let i = 0; i < createdShots.length; i++) {
     if (options?.signal?.aborted) break;
     const shot = createdShots[i];
