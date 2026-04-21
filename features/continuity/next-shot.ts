@@ -106,11 +106,38 @@ export async function createContinuation(
 
   // Build prompt with continuity directive + project brief context
   const briefCtx = getBriefText();
+
+  // Get the concept card for this shot's campaign (for aspect + brief)
+  const conceptCardId = (parent.metadata as { from_concept_card?: string } | null)?.from_concept_card;
+  const conceptCard = conceptCardId ? state.nodes.find((n) => n.id === conceptCardId) : null;
+
   const prompt = [
     briefCtx ? `${briefCtx}\n\n` : "",
-    node.prompt_enhanced,
-    `\n\nOriginal concept: ${node.prompt}`,
-  ].join("");
+    `HOLLYWOOD-GRADE AD STILL — CONTINUITY SHOT`,
+    ``,
+    `CONTINUITY DIRECTIVE: This is the next beat in the same campaign as the parent shot.`,
+    `- Parent shot: "${parent.title ?? "prior shot"}"`,
+    `- This shot: "${node.prompt}"`,
+    ``,
+    `CONSISTENCY REQUIREMENTS (non-negotiable):`,
+    `- Same actor, same clothing, same environment — continuity creates belief`,
+    `- Same color temperature as parent (warm OR cool — never switch)`,
+    `- Same lighting direction as parent`,
+    `- Change ONLY: camera angle and subject action`,
+    `- If product appears: same orientation and placement as parent`,
+    ``,
+    `ABSOLUTE HARD CONSTRAINTS:`,
+    `✗ NO objects flying, floating, or defying gravity`,
+    `✗ NO text, numbers, timers, or digital readouts in the image`,
+    `✗ NO stock-photo poses — real micro-moments, caught mid-action`,
+    ``,
+    `SOUL CINEMA QUALITY:`,
+    `- Subject razor sharp, background softly blurred (f/1.8–f/2.8)`,
+    `- Deep rich textures — tactile surfaces visible`,
+    `- Lighting from ONE motivated source — never flat`,
+    `- Film grain: subtle grain reads as cinematic`,
+    `- Reference image (parent shot) = identity and style lock — do NOT recreate it, advance from it`,
+  ].filter(Boolean).join("\n");
 
   // Collect refs: parent image (slot-1 identity lock) + brief product images (slot-2+)
   const refImages: Array<{ base64: string; mimeType: string }> = [];
@@ -134,6 +161,10 @@ export async function createContinuation(
         prompt,
         modelId: "nanobanana-pro",
         aspectRatio: (() => {
+          // Prefer concept card's stored aspect over node dimensions (more accurate)
+          const storedAspect = (conceptCard?.metadata as { aspect?: string } | null)?.aspect;
+          if (storedAspect) return storedAspect as "9:16" | "1:1" | "16:9" | "4:5" | "3:4";
+          // Fallback: derive from parent node dimensions
           if (!parent.w || !parent.h) return "9:16";
           const ratio = parent.w / parent.h;
           if (ratio > 1.6) return "16:9";

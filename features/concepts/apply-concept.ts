@@ -18,6 +18,11 @@ export async function applyConceptToBoard(concept: ConceptUI): Promise<void> {
   const boardId = state.boardId;
   if (!boardId) throw new Error("no board loaded");
 
+  // Resolve aspect ratio: prefer concept card meta > default 9:16
+  const conceptCard = state.nodes.find((n) => n.type === "concept_card");
+  const aspectRatio: "9:16" | "1:1" | "16:9" | "4:5" | "3:4" =
+    (conceptCard?.metadata as { aspect?: string } | null)?.aspect as "9:16" | "1:1" | "16:9" | "4:5" | "3:4" ?? "9:16";
+
   const now = new Date().toISOString();
 
   // Row 1 — source images from the concept's moodboard (top)
@@ -132,7 +137,7 @@ export async function applyConceptToBoard(concept: ConceptUI): Promise<void> {
 
   for (let i = 0; i < shotNodes.length; i++) {
     const shot = shotNodes[i];
-    const imageUrl = await generateShotImage(shot, concept, i).catch(() => null);
+    const imageUrl = await generateShotImage(shot, concept, i, aspectRatio).catch(() => null);
     const finalUrl = imageUrl ?? MOCK_IMAGES[i % MOCK_IMAGES.length];
     const ready = {
       ...shot,
@@ -160,20 +165,42 @@ export async function applyConceptToBoard(concept: ConceptUI): Promise<void> {
 async function generateShotImage(
   shot: NodeRow,
   concept: ConceptUI,
-  index: number
+  index: number,
+  aspectRatio: "9:16" | "1:1" | "16:9" | "4:5" | "3:4" = "9:16"
 ): Promise<string | null> {
   const briefCtx = getBriefText();
   const purpose = (shot.metadata as { purpose?: string } | null)?.purpose ?? "shot";
+  const isHook = index === 0;
+  const isClosing = index === concept.shotCount - 1;
 
   const prompt = [
     briefCtx ? `${briefCtx}\n\n` : "",
-    `DIRECT-RESPONSE AD STILL — ORIGINAL CREATIVE CONCEPT`,
-    `Shot ${index + 1} of ${concept.shotCount}: ${concept.title}`,
+    `HOLLYWOOD-GRADE AD STILL — DIRECT RESPONSE — SHOT ${index + 1} OF ${concept.shotCount}`,
+    ``,
+    `FRAME: ${concept.title} — ${purpose}`,
     `SCENE: ${concept.visualSpine}`,
-    `SHOT ROLE: ${purpose} — ${index === 0 ? "hook frame, must stop the scroll in <0.5s" : "story/product beat"}`,
     `Hook archetype: ${concept.hookArchetype}`,
-    `Palette: ${concept.palette.join(", ")} | Mood: ${concept.moodKeywords.join(", ")}`,
-    `PRODUCTION STANDARDS: photorealistic commercial photography, 35mm film texture, shallow depth of field, single focal point, no stock-photo clichés.`,
+    `Palette direction: ${concept.palette.join(", ")} | Mood: ${concept.moodKeywords.join(", ")}`,
+    ``,
+    isHook
+      ? `HOOK FRAME — First 0.5 seconds decide everything. Extreme close-up, unexpected angle, or visual mismatch that stops the scroll before the brain decides to keep scrolling.`
+      : isClosing
+      ? `CLOSING FRAME — Aspirational identity. Viewer sees who they become. Emotionally resolved, visually complete. Right third of frame empty for logo overlay.`
+      : `STORY BEAT [${purpose}] — One focal point, no visual noise. Every element in frame earns its place.`,
+    ``,
+    `ABSOLUTE HARD CONSTRAINTS:`,
+    `✗ NO objects flying, floating, or defying gravity — all physics are real`,
+    `✗ NO text, numbers, timers, clocks, or digital readouts in the image`,
+    `✗ NO product shown center-stage like a billboard — product is in human hands or natural context`,
+    `✗ NO stock-photo poses — real micro-moments, unguarded, caught mid-action`,
+    `✗ NO visual metaphors shown literally`,
+    ``,
+    `SOUL CINEMA QUALITY:`,
+    `- Cinematic depth of field: subject sharp, background softly blurred`,
+    `- Deep rich textures: tactile surfaces — skin, fabric, glass, concrete`,
+    `- ONE lighting source: window / candle / neon / morning sun — never flat studio`,
+    `- Film grain aesthetic: subtle grain reads as cinematic, not noise`,
+    `- ONE color temperature: all warm OR all cool — never mixed`,
   ].filter(Boolean).join("\n");
 
   // Inject product images from brief as visual reference
@@ -185,7 +212,7 @@ async function generateShotImage(
     body: JSON.stringify({
       prompt,
       modelId: "nanobanana-pro",
-      aspectRatio: "9:16",
+      aspectRatio,
       refImages: refImages.length > 0 ? refImages : undefined,
       action: "concept.apply-shot",
       nodeId: shot.id,
