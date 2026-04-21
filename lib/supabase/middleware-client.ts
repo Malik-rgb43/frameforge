@@ -18,7 +18,7 @@ export async function updateSession(request: NextRequest) {
         //    Set-Cookie headers are included in the response.
         // 3. Copy ALL cookies from old response + new ones to keep any
         //    previously set cookies intact.
-        setAll(cookiesToSet) {
+        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
           cookiesToSet.forEach(({ name, value }) =>
             request.cookies.set(name, value)
           );
