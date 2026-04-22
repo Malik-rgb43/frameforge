@@ -109,8 +109,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Eagerly resolve session on mount so we don't wait for onAuthStateChange
     sb.auth.getSession().then(async ({ data: { session } }) => {
       if (!session?.user) {
-        // No active session — middleware will redirect, but update state now
+        // No active session — redirect to login if we're on a protected page.
+        // (middleware was removed, so client-side guard handles this)
         setState({ user: null, workspaceId: null, loading: false });
+        if (typeof window !== "undefined") {
+          const path = window.location.pathname;
+          const isPublic = path.startsWith("/login") || path.startsWith("/auth");
+          if (!isPublic) {
+            const next = encodeURIComponent(path + window.location.search);
+            window.location.replace(`/login?next=${next}`);
+          }
+        }
         return;
       }
       const patch = await resolveSession(session);
