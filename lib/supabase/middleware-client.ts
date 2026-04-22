@@ -1,71 +1,47 @@
-import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
+/**
+ * Fast middleware auth check — NO network calls.
+ *
+ * Previous version called `supabase.auth.getUser()` which hits Supabase's
+ * auth server on every request. When Supabase was slow or unreachable,
+ * the middleware timed out (MIDDLEWARE_INVOCATION_TIMEOUT → 504 gateway).
+ *
+ * New approach: check for the presence of any Supabase auth cookie.
+ * If present → let request through, client-side auth provider validates.
+ * If absent → redirect to /login immediately (no network call needed).
+ *
+ * JWT validation happens client-side in AuthProvider via `getUser()`.
+ * If the token is invalid, onAuthStateChange fires SIGNED_OUT and we
+ * redirect to /login there. Middleware stays fast and never blocks.
+ */
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
-
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!.trim(),
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!.trim(),
-    {
-      cookies: {
-        getAll() {
-          return request.cookies.getAll();
-        },
-        // Canonical Supabase SSR pattern:
-        // 1. Mutate request cookies so subsequent server code sees them.
-        // 2. Rebuild supabaseResponse with the mutated request so
-        //    Set-Cookie headers are included in the response.
-        // 3. Copy ALL cookies from old response + new ones to keep any
-        //    previously set cookies intact.
-        setAll(cookiesToSet: { name: string; value: string; options?: Record<string, unknown> }[]) {
-          cookiesToSet.forEach(({ name, value }) =>
-            request.cookies.set(name, value)
-          );
-          // Capture existing cookies before rebuilding response
-          const existingCookies = supabaseResponse.cookies.getAll();
-          supabaseResponse = NextResponse.next({ request });
-          // Re-apply existing cookies
-          existingCookies.forEach(({ name, value }) =>
-            supabaseResponse.cookies.set(name, value)
-          );
-          // Apply new/updated cookies
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
-        },
-      },
-    }
-  );
-
-  // IMPORTANT: Use getUser() not getSession() — getUser() validates the JWT
-  // with the Supabase server on every request (slower but correct/secure).
-  // getSession() only reads the local cookie without server validation.
-  const {
-    data: { user },
-    error: getUserError,
-  } = await supabase.auth.getUser();
-
-  if (getUserError) {
-    console.warn("[middleware] getUser error:", getUserError.message);
-  }
+  const path = request.nextUrl.pathname;
 
   const isPublicPath =
-    request.nextUrl.pathname.startsWith("/login") ||
-    request.nextUrl.pathname.startsWith("/auth");
+    path.startsWith("/login") ||
+    path.startsWith("/auth") ||
+    path.startsWith("/_next") ||
+    path.startsWith("/favicon") ||
+    path.startsWith("/api");
 
-  if (!user && !isPublicPath) {
-    const url = request.nextUrl.clone();
-    // Preserve the original path as `next` param so after login we redirect back
-    url.pathname = "/login";
-    url.searchParams.set("next", request.nextUrl.pathname);
-    const redirectResponse = NextResponse.redirect(url);
-    // Forward refreshed session cookies so they aren't lost on redirect
-    supabaseResponse.cookies.getAll().forEach((cookie) => {
-      redirectResponse.cookies.set(cookie.name, cookie.value);
-    });
-    return redirectResponse;
+  if (isPublicPath) {
+    return NextResponse.next({ request });
   }
 
-  return supabaseResponse;
+  // Supabase SSR stores auth in cookies named `sb-<project-ref>-auth-token`
+  // (or chunked as `sb-<ref>-auth-token.0`, `.1`, etc. for large tokens).
+  const allCookies = request.cookies.getAll();
+  const hasAuthCookie = allCookies.some(
+    (c) => c.name.startsWith("sb-") && c.name.includes("-auth-token")
+  );
+
+  if (!hasAuthCookie) {
+    const url = request.nextUrl.clone();
+    url.pathname = "/login";
+    url.searchParams.set("next", path);
+    return NextResponse.redirect(url);
+  }
+
+  return NextResponse.next({ request });
 }
